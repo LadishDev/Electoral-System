@@ -52,7 +52,8 @@ CREATE TABLE electionresults (
     constituencyID INT,
     FOREIGN KEY (constituencyID) REFERENCES constituency(constituencyID),
     partyID INT,
-    FOREIGN KEY (partyID) REFERENCES party(partyID)
+    FOREIGN KEY (partyID) REFERENCES party(partyID),
+    votes INT
 );  
 
 
@@ -95,8 +96,8 @@ SELECT DISTINCT regionName FROM temp_table;
 INSERT INTO country (countryName)
 SELECT DISTINCT countryName FROM temp_table;
 
--- Insert data into constituency table
-INSERT INTO constituency (constituencyName, constituencyType, sittingmp, countyID, regionID, countryID)
+-- Insert data into constituency table (handling duplicates)
+INSERT IGNORE INTO constituency (constituencyName, constituencyType, sittingmp, countyID, regionID, countryID)
 SELECT DISTINCT t.constituencyName, t.constituencyType, t.sittingmp, c.countyID, r.regionID, co.countryID
 FROM temp_table t
 JOIN county c ON t.countyName = c.countyName
@@ -107,20 +108,29 @@ JOIN country co ON t.countryName = co.countryName;
 INSERT INTO party (partyName)
 SELECT DISTINCT PartyName FROM temp_table;
 
--- Insert data into candidate table
-INSERT INTO candidate (firstname, surname, gender, partyID, constituencyID)
-SELECT DISTINCT t.firstname, t.surname, t.gender, p.partyID, con.constituencyID
+-- Insert data into candidate table (handling duplicates)
+INSERT IGNORE INTO candidate (firstname, surname, gender, partyID, constituencyID)
+SELECT
+    t.firstname,
+    t.surname,
+    t.gender,
+    (SELECT p.partyID FROM party p WHERE t.PartyName = p.partyName LIMIT 1),
+    (SELECT con.constituencyID FROM constituency con WHERE t.constituencyName = con.constituencyName LIMIT 1)
 FROM temp_table t
-JOIN party p ON t.PartyName = p.partyName
-JOIN constituency con ON t.constituencyName = con.constituencyName;
+GROUP BY
+    t.firstname,
+    t.surname,
+    t.gender,
+    t.PartyName,
+    t.constituencyName;
 
 -- Insert data into electionresults table
-INSERT INTO electionresults (constituencyID, partyID)
-SELECT con.constituencyID, p.partyID
-FROM temp_table t
-JOIN party p ON t.PartyName = p.partyName
-JOIN constituency con ON t.constituencyName = con.constituencyName;
-
+INSERT IGNORE INTO electionresults (constituencyID, partyID)
+SELECT 
+    (SELECT con.constituencyID FROM constituency con WHERE t.constituencyName = con.constituencyName LIMIT 1),
+    (SELECT p.partyID FROM party p WHERE t.PartyName = p.partyName LIMIT 1),
+    t.votes
+FROM temp_table t;
 
 -- Drop the Temporary Table
 DROP TABLE temp_table;

@@ -58,7 +58,7 @@ CREATE TABLE electionresults (
 
 /* INSERT CSV DATA INTO TEMPORARY TABLE */
 
-CREATE TABLE temp_table (
+CREATE TEMPORARY TABLE temp_table (
     tempID INT PRIMARY KEY AUTO_INCREMENT,
     constituencyName VARCHAR(46),
     countyName VARCHAR(24),
@@ -133,5 +133,8 @@ FROM temp_table
 LEFT JOIN constituency ON temp_table.constituencyName = constituency.constituencyName
 LEFT JOIN party ON temp_table.partyName = party.partyName
 GROUP BY temp_table.constituencyName, temp_table.partyName, temp_table.votes;
+
+-- Drop temporary table
+DROP TEMPORARY TABLE IF EXISTS temp_table;
 
 SELECT 'Database tables have been created and populated successfully.' AS 'Message';

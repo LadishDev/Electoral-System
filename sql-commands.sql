@@ -56,8 +56,6 @@ CREATE TABLE electionresults (
     votes INT
 );  
 
-
-
 /* INSERT CSV DATA INTO TEMPORARY TABLE */
 
 CREATE TABLE temp_table (
@@ -82,55 +80,58 @@ LINES TERMINATED BY '\n'
 IGNORE 1 ROWS
 (constituencyName, countyName, regionName, countryName, constituencyType, PartyName, firstname, surname, gender, sittingmp, votes);
 
-/* INSERT DATA FROM TEMPORARY TABLE INTO DATABASE TABLES */
+/* INSERT DATA FROM TEMPORARY TABLE INTO DATABASE TABLES SQL COMMANDS */
 
--- Insert data into county table
-INSERT INTO county (countyName)
-SELECT DISTINCT countyName FROM temp_table;
-
--- Insert data into region table
-INSERT INTO region (regionName)
-SELECT DISTINCT regionName FROM temp_table;
-
--- Insert data into country table
+-- Insert data into country, region, county, and party tables
 INSERT INTO country (countryName)
 SELECT DISTINCT countryName FROM temp_table;
 
--- Insert data into constituency table (handling duplicates)
-INSERT IGNORE INTO constituency (constituencyName, constituencyType, sittingmp, countyID, regionID, countryID)
-SELECT DISTINCT t.constituencyName, t.constituencyType, t.sittingmp, c.countyID, r.regionID, co.countryID
-FROM temp_table t
-JOIN county c ON t.countyName = c.countyName
-JOIN region r ON t.regionName = r.regionName
-JOIN country co ON t.countryName = co.countryName;
+INSERT INTO region (regionName)
+SELECT DISTINCT regionName FROM temp_table;
 
--- Insert data into party table
+INSERT INTO county (countyName)
+SELECT DISTINCT countyName FROM temp_table;
+
 INSERT INTO party (partyName)
 SELECT DISTINCT PartyName FROM temp_table;
 
--- Insert data into candidate table (handling duplicates)
-INSERT IGNORE INTO candidate (firstname, surname, gender, partyID, constituencyID)
+-- Insert data into constituency table
+INSERT INTO constituency (constituencyName, constituencyType, sittingmp, countyID, regionID, countryID)
 SELECT
-    t.firstname,
-    t.surname,
-    t.gender,
-    (SELECT p.partyID FROM party p WHERE t.PartyName = p.partyName LIMIT 1),
-    (SELECT con.constituencyID FROM constituency con WHERE t.constituencyName = con.constituencyName LIMIT 1)
-FROM temp_table t
-GROUP BY
-    t.firstname,
-    t.surname,
-    t.gender,
-    t.PartyName,
-    t.constituencyName;
+    temp_table.constituencyName,
+    temp_table.constituencyType,
+    temp_table.sittingmp,
+    county.countyID,
+    region.regionID,
+    country.countryID 
+FROM temp_table
+LEFT JOIN county ON temp_table.countyName = county.countyName
+LEFT JOIN region ON temp_table.regionName = region.regionName
+LEFT JOIN country ON temp_table.countryName = country.countryName;
 
--- Insert data into electionresults table
-INSERT IGNORE INTO electionresults (constituencyID, partyID)
-SELECT 
-    (SELECT con.constituencyID FROM constituency con WHERE t.constituencyName = con.constituencyName LIMIT 1),
-    (SELECT p.partyID FROM party p WHERE t.PartyName = p.partyName LIMIT 1),
-    t.votes
-FROM temp_table t;
 
--- Drop the Temporary Table
-DROP TABLE temp_table;
+-- Insert data into candidate table
+INSERT INTO candidate (firstname, surname, gender, partyID, constituencyID)
+SELECT
+    temp_table.firstname,
+    temp_table.surname,
+    temp_table.gender,
+    MAX(party.partyID) AS partyID,
+    MAX(constituency.constituencyID) AS constituencyID
+FROM temp_table
+LEFT JOIN party ON temp_table.partyName = party.partyName
+LEFT JOIN constituency ON temp_table.constituencyName = constituency.constituencyName
+GROUP BY temp_table.firstname, temp_table.surname, temp_table.gender, temp_table.tempID;
+
+-- Insert data into election results table
+INSERT INTO electionresults (constituencyID, partyID, votes)
+SELECT
+    MAX(constituency.constituencyID) AS constituencyID,
+    MAX(party.partyID) AS partyID,
+    SUM(temp_table.votes) AS total_votes
+FROM temp_table
+LEFT JOIN constituency ON temp_table.constituencyName = constituency.constituencyName
+LEFT JOIN party ON temp_table.partyName = party.partyName
+GROUP BY temp_table.constituencyName, temp_table.partyName, temp_table.votes;
+
+SELECT 'Database tables have been created and populated successfully.' AS 'Message';

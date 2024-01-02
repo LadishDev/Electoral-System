@@ -27,8 +27,10 @@ def home():
 def viewdata():
     if "viewalldata" in request.form:
         return render_template('view_all_data.html', data=view_all_data())
-    elif "test" in request.form:
+    elif "fptpseats" in request.form:
         return render_template('fptp_seats_data.html', data=calculate_fptp_seats())
+    elif "sprelection" in request.form:  
+        return render_template('spr_election.html')
     elif "back" in request.form:
         return render_template('index.html')
     else:
@@ -48,6 +50,29 @@ def fptpdata():
     else:
         return render_template('errorpage.html')
 
+@app.route('/sprelection', methods=['GET', 'POST'])
+def sprelectiondata():
+    if "electionspr" in request.form:
+        return render_template('spr_election_data.html', data=calculate_election_spr())
+    elif "electionsprthreshold" in request.form:
+        return render_template('spr_election_data.html')
+    elif "electionsprcounty" in request.form:
+        return render_template('spr_election_data.html')
+    elif "electionsprregion" in request.form:
+        return render_template('spr_election_data.html')
+    elif "electionsprcountry" in request.form:
+        return render_template('spr_election_data.html')
+    elif "back" in request.form:
+        return render_template('view_data.html')
+    else:
+        return render_template('errorpage.html')
+
+@app.route('/sprelectiondata', methods=['GET', 'POST'])
+def sprelectiondata1():
+    if "back" in request.form:
+        return render_template('spr_election.html')
+    else:
+        return render_template('errorpage.html')
 
 @app.route('/errorpage', methods=['GET', 'POST'])
 def errorpage():
@@ -98,6 +123,37 @@ def calculate_fptp_seats():
     cur.close()
     return seats_data
 
+
+# General Election seats based on Simple Proportional Representation (All seats)
+def calculate_election_spr():
+    operation_name = "All Seats"
+    # Get data from the database
+    cur = electoraldb.cursor(dictionary=True)  # Use dictionary cursor
+
+    # SQL query to get all the votes for each party
+    cur.execute('''
+        SELECT partyName, SUM(votes) AS total_votes
+        FROM electionresults e
+        JOIN party p ON e.partyID = p.partyID
+        GROUP BY partyName
+        ORDER BY total_votes DESC;
+    ''')
+
+    # Fetch the results
+    spr_results = cur.fetchall()
+    cur.close()
+
+    # Calculate the sum of total votes
+    total_votes_sum = sum(float(party_result['total_votes']) for party_result in spr_results)
+
+    # Prepare data for template
+    proportional_data = {}
+    for party_result in spr_results:
+        party_name = party_result['partyName']
+        total_votes = float(party_result['total_votes'])  # Convert to float
+        percentage_seats = (total_votes / total_votes_sum) * 100
+        proportional_data[party_name] = f"{percentage_seats:.2f}%"
+    return operation_name, proportional_data
 
 
 if __name__ == '__main__':

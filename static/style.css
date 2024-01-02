@@ -21,6 +21,10 @@ h1, h2 {
     align-items: center;
 }
 
+.options-container input {
+    margin: 5px;
+}
+
 table {
     margin: auto;
     width: 95%;

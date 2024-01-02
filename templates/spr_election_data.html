@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+    <form method="POST" action="/sprelectiondata">
+    <head>
+        <title>Proportional Representation Data</title>
+        <link rel="stylesheet" type="text/css" href="/static/style.css" />
+    </head>
+    <body>
+        <input type="submit" name="back" value="Go Back">
+        <h1>Proportional Representation Data</h1>
+        <h2> Via {{ data[0] }}</h2>
+        
+        <table>
+            <tr>
+                <th>Party</th>
+                <th>Percentage of Seats</th>
+            </tr>
+            {% for party_name, percentage_seats in data[1].items() %}
+            <tr>
+                <td>{{ party_name }}</td>
+                <td>{{ percentage_seats }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </body>
+</html>

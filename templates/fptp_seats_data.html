@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+    <form method="POST" action="/fptpdata">
+    <head>
+        <title>Test Page</title>
+        <link rel="stylesheet" type="text/css" href="/static/style.css" />
+    </head>
+    <body>
+        <input type = "submit" name="back" value="Go Back">
+        <h1>FPTP Seats Distribution</h1>
+
+        <table>
+            <tr>
+                <th>Party</th>
+                <th>Seats</th>
+            </tr>
+            {% for party, seat_count in data.items() %}
+            <tr>
+                <td>{{ party }}</td>
+                <td>{{ seat_count }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </body>
+</html>

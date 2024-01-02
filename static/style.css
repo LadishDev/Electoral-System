@@ -20,3 +20,16 @@ h1, h2 {
     justify-content: center;
     align-items: center;
 }
+
+table {
+    margin: auto;
+    width: 95%;
+}
+
+table, th, td {
+    border: 1px solid;
+}
+
+td {
+    white-space: nowrap;
+}

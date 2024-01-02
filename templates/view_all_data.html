@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+    <form method="POST" action="/viewalldata">
+    <head>
+        <title>Election System</title>
+        <link rel="stylesheet" type="text/css" href="/static/style.css" />
+    </head>
+    <body>
+        <input type = "submit" name="back" value="Go Back">
+        <h1>Viewing All Data</h1>
+        <br><br>
+
+        <table>
+            <tr>
+                <th>First Name</th>
+                <th>Surname</th>
+                <th>Gender</th>
+                <th>Party Name</th>
+                <th>Constituency Name</th>
+                <th>Constituency Type</th>
+                <th>County Name</th>
+                <th>Region Name</th>
+                <th>Country Name</th>
+                <th>Sitting MP</th>
+                <th>Votes</th>
+            </tr>
+            {% for item in data %}
+            <tr>
+                <td>{{item[0]}}</td>
+                <td>{{item[1]}}</td>
+                <td>{{item[2]}}</td>
+                <td>{{item[3]}}</td>
+                <td>{{item[4]}}</td>
+                <td>{{item[5]}}</td>
+                <td>{{item[6]}}</td>
+                <td>{{item[7]}}</td>
+                <td>{{item[8]}}</td>
+                <td>{{item[9]}}</td>
+                <td>{{item[10]}}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </body>
+</html>

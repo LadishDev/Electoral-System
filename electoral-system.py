@@ -212,27 +212,29 @@ def calculate_election_lr(level=None):
     # Get data from the database
     cur = electoraldb.cursor(dictionary=True)
 
-    # Determine the column names based on the specified level
+    # Determine the column names and join table based on the specified level
     if level == "County":
         column_name = "c.countyName"
         join_table = "county c"
+        join_condition = "con.countyID = c.countyID"
     elif level == "Region":
         column_name = "r.regionName"
         join_table = "region r"
+        join_condition = "con.regionID = r.regionID"
     elif level == "Country":
         column_name = "co.countryName"
         join_table = "country co"
+        join_condition = "con.countryID = co.countryID"
     else:
         raise ValueError("Invalid level specified. Please choose from: 'County', 'Region', 'Country'")
 
     # SQL query to get all the votes for each party by the specified level
     cur.execute(f'''
-        SELECT {column_name}, SUM(e.votes) AS total_votes
+        SELECT {column_name} AS geo_name, SUM(e.votes) AS total_votes
         FROM electionresults e
         JOIN constituency con ON e.constituencyID = con.constituencyID
-        JOIN {join_table}
-        ON con.{level.lower()}ID = {join_table}.{level.lower()}ID
-        GROUP BY {column_name}
+        JOIN {join_table} ON {join_condition}
+        GROUP BY geo_name
         ORDER BY total_votes DESC;
     ''')
 
@@ -249,14 +251,14 @@ def calculate_election_lr(level=None):
     # Calculate whole number of seats allocated ( Whole number of votes for a party / Hare Quota )
     seats_allocated = {}
     for result in pr_results:
-        geo_name = result[column_name]
+        geo_name = result['geo_name']
         total_votes = float(result['total_votes'])
         seats_allocated[geo_name] = total_votes // hare_quota
     
     # Calculate the remainder ( Total votes for a party - (Whole number of seats allocated * Hare Quota) )
     remainder = {}
     for result in pr_results:
-        geo_name = result[column_name]
+        geo_name = result['geo_name']
         total_votes = float(result['total_votes'])
         remainder[geo_name] = total_votes - (seats_allocated[geo_name] * hare_quota)
 
@@ -274,6 +276,8 @@ def calculate_election_lr(level=None):
         data_largest_remainder[geo_name] = int(seat_count)
 
     return operation_name, data_largest_remainder
+
+
 
 
 

@@ -55,15 +55,15 @@ def fptpdata():
 @app.route('/sprelection', methods=['GET', 'POST'])
 def sprelection():
     if "electionspr" in request.form:
-        return render_template('spr_election_data.html', data=calculate_election_spr())
+        return render_template('spr_election_data.html', data=calculate_election_spr("All Seats"))
     elif "electionsprthreshold" in request.form:
-        return render_template('spr_election_data.html', data=calculate_election_spr_threshold())
+        return render_template('spr_election_data.html', data=calculate_election_spr("All Seats", 5))
     elif "electionsprcounty" in request.form:
-        return render_template('spr_election_data.html', data=calculate_election_spr_by_county())
+        return render_template('spr_election_data.html', data=calculate_election_spr("County"))
     elif "electionsprregion" in request.form:
-        return render_template('spr_election_data.html', data=calculate_election_spr_by_region())
+        return render_template('spr_election_data.html', data=calculate_election_spr("Region"))
     elif "electionsprcountry" in request.form:
-        return render_template('spr_election_data.html', data=calculate_election_spr_by_country())
+        return render_template('spr_election_data.html', data=calculate_election_spr("Country"))
     elif "back" in request.form:
         return render_template('view_data.html')
     else:
@@ -139,171 +139,65 @@ def calculate_fptp_seats():
     return seats_data
 
 
-# General Election seats based on Simple Proportional Representation (All seats)
-def calculate_election_spr():
-    operation_name = "All Seats"
-    # Get data from the database
-    cur = electoraldb.cursor(dictionary=True)  # Use dictionary cursor
+def calculate_election_spr(level="All Seats", threshold=None):
+    operation_name = level
 
-    # SQL query to get all the votes for each party
-    cur.execute('''
-        SELECT partyName, SUM(votes) AS total_votes
-        FROM electionresults e
-        JOIN party p ON e.partyID = p.partyID
-        GROUP BY partyName
-        ORDER BY total_votes DESC;
-    ''')
+    # Get data from the database
+    cur = electoraldb.cursor(dictionary=True)
+
+    # Determine the appropriate SQL query based on the specified level
+    if level == "All Seats":
+        query = '''
+            SELECT partyName, SUM(votes) AS total_votes
+            FROM electionresults e
+            JOIN party p ON e.partyID = p.partyID
+            GROUP BY partyName
+            ORDER BY total_votes DESC;
+        '''
+        if threshold:
+            query = f'''
+                SELECT partyName, SUM(votes) AS total_votes
+                FROM electionresults e
+                JOIN party p ON e.partyID = p.partyID
+                GROUP BY partyName
+                HAVING (SUM(votes) / (SELECT SUM(votes) FROM electionresults)) * 100 > {threshold}
+                ORDER BY total_votes DESC;
+            '''
+        group_by_column = 'partyName'
+    elif level in ["County", "Region", "Country"]:
+        column_name = level.lower() + "Name"
+        query = f'''
+            SELECT {column_name}, SUM(e.votes) AS total_votes
+            FROM electionresults e
+            JOIN constituency con ON e.constituencyID = con.constituencyID
+            JOIN {level.lower()} l ON con.{level.lower()}ID = l.{level.lower()}ID
+            GROUP BY {column_name}
+            ORDER BY {column_name};
+        '''
+        group_by_column = column_name
+    else:
+        raise ValueError("Invalid level specified")
+
+    # Execute the SQL query
+    cur.execute(query)
 
     # Fetch the results
-    spr_results = cur.fetchall()
+    pr_results = cur.fetchall()
     cur.close()
 
     # Calculate the sum of total votes
-    total_votes_sum = sum(float(party_result['total_votes']) for party_result in spr_results)
+    total_votes_sum = sum(float(result['total_votes']) for result in pr_results)
 
     # Prepare data for template
     proportional_data = {}
-    for party_result in spr_results:
-        party_name = party_result['partyName']
-        total_votes = float(party_result['total_votes'])  # Convert to float
+    for result in pr_results:
+        name = result[group_by_column]
+        total_votes = float(result['total_votes'])
         percentage_seats = (total_votes / total_votes_sum) * 100
-        proportional_data[party_name] = f"{percentage_seats:.2f}%"
+        proportional_data[name] = f"{percentage_seats:.2f}%"
+
     return operation_name, proportional_data
 
-# General Election seats based on Simple Proportional Representation (All Seats) with threshold of 5%
-def calculate_election_spr_threshold():
-    operation_name = "All Seats with 5% Threshold"
-    
-    # Get data from the database
-    cur = electoraldb.cursor(dictionary=True)  # Use dictionary cursor
-
-    # SQL query to get all the votes for each party, considering only parties with more than 5% votes
-    cur.execute('''
-        SELECT partyName, SUM(votes) AS total_votes
-        FROM electionresults e
-        JOIN party p ON e.partyID = p.partyID
-        GROUP BY partyName
-        HAVING (SUM(votes) / (SELECT SUM(votes) FROM electionresults)) * 100 > 5
-        ORDER BY total_votes DESC;
-    ''')
-
-    # Fetch the results
-    spr_results = cur.fetchall()
-    cur.close()
-
-    # Calculate the sum of total votes
-    total_votes_sum = sum(float(party_result['total_votes']) for party_result in spr_results)
-
-    # Prepare data for template
-    proportional_data = {}
-    for party_result in spr_results:
-        party_name = party_result['partyName']
-        total_votes = float(party_result['total_votes'])  # Convert to float
-        percentage_seats = (total_votes / total_votes_sum) * 100
-        proportional_data[party_name] = f"{percentage_seats:.2f}%"
-    return operation_name, proportional_data
-
-# General Election seats based on Proportional Representation (By County)
-def calculate_election_spr_by_county():
-    operation_name = "County"
-
-    # Get data from the database
-    cur = electoraldb.cursor(dictionary=True)
-
-    # SQL query to get all the votes for each party by county
-    cur.execute('''
-        SELECT c.countyName, SUM(e.votes) AS total_votes
-        FROM electionresults e
-        JOIN constituency con ON e.constituencyID = con.constituencyID
-        JOIN county c ON con.countyID = c.countyID
-        GROUP BY c.countyName
-        ORDER BY c.countyName;
-    ''')
-
-    # Fetch the results
-    pr_results = cur.fetchall()
-    cur.close()
-
-    # Calculate the sum of total votes
-    total_votes_sum = sum(float(result['total_votes']) for result in pr_results)
-
-    # Prepare data for template
-    proportional_data_by_county = {}
-    for result in pr_results:
-        county_name = result['countyName']
-        total_votes = float(result['total_votes'])
-        percentage_seats = (total_votes / total_votes_sum) * 100
-        proportional_data_by_county[county_name] = f"{percentage_seats:.2f}%"
-
-    return operation_name, proportional_data_by_county
-
-# General Election seats based on Proportional Representation (By Region)
-def calculate_election_spr_by_region():
-    operation_name = "Region"
-
-    # Get data from the database
-    cur = electoraldb.cursor(dictionary=True)
-
-    # SQL query to get all the votes for each party by region
-    cur.execute('''
-        SELECT r.regionName, SUM(e.votes) AS total_votes
-        FROM electionresults e
-        JOIN constituency con ON e.constituencyID = con.constituencyID
-        JOIN region r ON con.regionID = r.regionID
-        GROUP BY r.regionName
-        ORDER BY r.regionName;
-    ''')
-
-    # Fetch the results
-    pr_results = cur.fetchall()
-    cur.close()
-
-    # Calculate the sum of total votes
-    total_votes_sum = sum(float(result['total_votes']) for result in pr_results)
-
-    # Prepare data for template
-    proportional_data_by_region = {}
-    for result in pr_results:
-        region_name = result['regionName']
-        total_votes = float(result['total_votes'])
-        percentage_seats = (total_votes / total_votes_sum) * 100
-        proportional_data_by_region[region_name] = f"{percentage_seats:.2f}%"
-
-    return operation_name, proportional_data_by_region
-
-# General Election seats based on Proportional Representation (By Country)
-def calculate_election_spr_by_country():
-    operation_name = "Country"
-
-    # Get data from the database
-    cur = electoraldb.cursor(dictionary=True)
-
-    # SQL query to get all the votes for each party by country
-    cur.execute('''
-        SELECT co.countryName, SUM(e.votes) AS total_votes
-        FROM electionresults e
-        JOIN constituency con ON e.constituencyID = con.constituencyID
-        JOIN country co ON con.countryID = co.countryID
-        GROUP BY co.countryName
-        ORDER BY co.countryName;
-    ''')
-
-    # Fetch the results
-    pr_results = cur.fetchall()
-    cur.close()
-
-    # Calculate the sum of total votes
-    total_votes_sum = sum(float(result['total_votes']) for result in pr_results)
-
-    # Prepare data for template
-    proportional_data_by_country = {}
-    for result in pr_results:
-        country_name = result['countryName']
-        total_votes = float(result['total_votes'])
-        percentage_seats = (total_votes / total_votes_sum) * 100
-        proportional_data_by_country[country_name] = f"{percentage_seats:.2f}%"
-
-    return operation_name, proportional_data_by_country
 
 # General Election seats allocations based on Largest Remainder (By County)
 def calculate_election_lr_by_county():

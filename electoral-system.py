@@ -81,11 +81,18 @@ def lrelection():
     if "lrelectioncounty" in request.form:
         return render_template('lr_election_data.html', data=calculate_election_lr_by_county())
     elif "lrelectionregion" in request.form:
-        return render_template('lr_election_data.html')
+        return render_template('lr_election_data.html', data=calculate_election_lr_by_region())
     elif "lrelectioncountry" in request.form:
-        return render_template('lr_election_data.html')
+        return render_template('lr_election_data.html', data=calculate_election_lr_by_country())
     elif "back" in request.form:
         return render_template('view_data.html')
+    else:
+        return render_template('errorpage.html')
+    
+@app.route('/lrelectiondata', methods=['GET', 'POST'])
+def lrelectiondata():
+    if "back" in request.form:
+        return render_template('lr_election.html')
     else:
         return render_template('errorpage.html')
 
@@ -139,7 +146,7 @@ def calculate_fptp_seats():
     return seats_data
 
 
-def calculate_election_spr(level="All Seats", threshold=None):
+def calculate_election_spr(level=None, threshold=None):
     operation_name = level
 
     # Get data from the database
@@ -172,7 +179,7 @@ def calculate_election_spr(level="All Seats", threshold=None):
             JOIN constituency con ON e.constituencyID = con.constituencyID
             JOIN {level.lower()} l ON con.{level.lower()}ID = l.{level.lower()}ID
             GROUP BY {column_name}
-            ORDER BY {column_name};
+            ORDER BY total_votes DESC;
         '''
         group_by_column = column_name
     else:
@@ -212,7 +219,8 @@ def calculate_election_lr_by_county():
         FROM electionresults e
         JOIN constituency con ON e.constituencyID = con.constituencyID
         JOIN county c ON con.countyID = c.countyID
-        GROUP BY c.countyName;
+        GROUP BY c.countyName
+        ORDER BY total_votes DESC;
     ''')
 
     # Fetch the results
@@ -256,8 +264,118 @@ def calculate_election_lr_by_county():
     return operation_name, data_by_county
 
 
-
 # General Election seats allocations based on Largest Remainder (By Region)
+def calculate_election_lr_by_region():
+    operation_name = "Region"
+
+    # Get data from the database
+    cur = electoraldb.cursor(dictionary=True)
+
+    # SQL query to get all the votes for each party by region
+    cur.execute('''
+        SELECT r.regionName, SUM(e.votes) AS total_votes
+        FROM electionresults e
+        JOIN constituency con ON e.constituencyID = con.constituencyID
+        JOIN region r ON con.regionID = r.regionID
+        GROUP BY r.regionName
+        ORDER BY total_votes DESC;
+    ''')
+
+    # Fetch the results
+    pr_results = cur.fetchall()
+    cur.close()
+
+    # Calculate the sum of total votes
+    total_votes_sum = sum(float(result['total_votes']) for result in pr_results)
+
+    # Calculate the Hare Quota
+    hare_quota = total_votes_sum / 650
+
+    # Calculate whole number of seats allocated ( Whole number of votes for a party / Hare Quota )
+    seats_allocated = {}
+    for result in pr_results:
+        region_name = result['regionName']
+        total_votes = float(result['total_votes'])
+        seats_allocated[region_name] = total_votes // hare_quota
+    
+    # Calculate the remainder ( Total votes for a party - (Whole number of seats allocated * Hare Quota) )
+    remainder = {}
+    for result in pr_results:
+        region_name = result['regionName']
+        total_votes = float(result['total_votes'])
+        remainder[region_name] = total_votes - (seats_allocated[region_name] * hare_quota)
+
+    # Sort the remainder in descending order
+    sorted_remainder = sorted(remainder.items(), key=lambda x: x[1], reverse=True)
+
+    # Allocate the remaining seats
+    for i in range(650 - round(sum(seats_allocated.values()))):
+        region_name = sorted_remainder[i][0]
+        seats_allocated[region_name] += 1
+        
+    # Prepare data for template 
+    data_by_region = {}
+    for region_name, seat_count in seats_allocated.items():
+        data_by_region[region_name] = int(seat_count)
+    
+    return operation_name, data_by_region
+
+# General Election seats allocations based on Largest Remainder (By Country)
+def calculate_election_lr_by_country():
+    operation_name = "Country"
+
+    # Get data from the database
+    cur = electoraldb.cursor(dictionary=True)
+
+    # SQL query to get all the votes for each party by country
+
+    cur.execute('''
+        SELECT co.countryName, SUM(e.votes) AS total_votes
+        FROM electionresults e
+        JOIN constituency con ON e.constituencyID = con.constituencyID
+        JOIN country co ON con.countryID = co.countryID
+        GROUP BY co.countryName
+        ORDER BY total_votes DESC;
+    ''')
+
+    # Fetch the results
+    pr_results = cur.fetchall()
+    cur.close()
+
+    # Calculate the sum of total votes
+    total_votes_sum = sum(float(result['total_votes']) for result in pr_results)
+
+    # Calculate the Hare Quota
+    hare_quota = total_votes_sum / 650
+
+    # Calculate whole number of seats allocated ( Whole number of votes for a party / Hare Quota )
+    seats_allocated = {}
+    for result in pr_results:
+        country_name = result['countryName']
+        total_votes = float(result['total_votes'])
+        seats_allocated[country_name] = total_votes // hare_quota
+    
+    # Calculate the remainder ( Total votes for a party - (Whole number of seats allocated * Hare Quota) )
+    remainder = {}
+    for result in pr_results:
+        country_name = result['countryName']
+        total_votes = float(result['total_votes'])
+        remainder[country_name] = total_votes - (seats_allocated[country_name] * hare_quota)
+    
+    # Sort the remainder in descending order
+    sorted_remainder = sorted(remainder.items(), key=lambda x: x[1], reverse=True)
+
+    # Allocate the remaining seats
+    for i in range(650 - round(sum(seats_allocated.values()))):
+        country_name = sorted_remainder[i][0]
+        seats_allocated[country_name] += 1
+
+    # Prepare data for template
+    data_by_country = {}
+    for country_name, seat_count in seats_allocated.items():
+        data_by_country[country_name] = int(seat_count)
+
+    return operation_name, data_by_country
 
 
 if __name__ == '__main__':

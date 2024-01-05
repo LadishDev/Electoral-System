@@ -5,7 +5,7 @@ import os
 app = Flask(__name__, static_url_path='/static')
 
 electoraldb = mysql.connector.connect(user=os.environ.get('DB_USER'), password=os.environ.get('DB_PASS'),
-                              host='localhost', database='electoralsystem',
+                              host='100.102.58.61', database='electoralsystem',
                               auth_plugin='mysql_native_password')
 
 
@@ -31,6 +31,8 @@ def viewdata():
         return render_template('fptp_seats_data.html', data=calculate_fptp_seats())
     elif "sprelection" in request.form:  
         return render_template('spr_election.html')
+    elif "lrelection" in request.form:
+        return render_template('lr_election.html')
     elif "back" in request.form:
         return render_template('index.html')
     else:
@@ -51,7 +53,7 @@ def fptpdata():
         return render_template('errorpage.html')
 
 @app.route('/sprelection', methods=['GET', 'POST'])
-def sprelectiondata():
+def sprelection():
     if "electionspr" in request.form:
         return render_template('spr_election_data.html', data=calculate_election_spr())
     elif "electionsprthreshold" in request.form:
@@ -68,9 +70,22 @@ def sprelectiondata():
         return render_template('errorpage.html')
 
 @app.route('/sprelectiondata', methods=['GET', 'POST'])
-def sprelectiondata1():
+def sprelectiondata():
     if "back" in request.form:
         return render_template('spr_election.html')
+    else:
+        return render_template('errorpage.html')
+    
+@app.route('/lrelection', methods=['GET', 'POST'])
+def lrelection():
+    if "lrelectioncounty" in request.form:
+        return render_template('lr_election_data.html', data=calculate_election_lr_by_county())
+    elif "lrelectionregion" in request.form:
+        return render_template('lr_election_data.html')
+    elif "lrelectioncountry" in request.form:
+        return render_template('lr_election_data.html')
+    elif "back" in request.form:
+        return render_template('view_data.html')
     else:
         return render_template('errorpage.html')
 
@@ -289,6 +304,66 @@ def calculate_election_spr_by_country():
         proportional_data_by_country[country_name] = f"{percentage_seats:.2f}%"
 
     return operation_name, proportional_data_by_country
+
+# General Election seats allocations based on Largest Remainder (By County)
+def calculate_election_lr_by_county():
+    operation_name = "County"
+
+    # Get data from the database
+    cur = electoraldb.cursor(dictionary=True)
+
+    # SQL query to get all the votes for each party by county
+    cur.execute('''
+        SELECT c.countyName, SUM(e.votes) AS total_votes
+        FROM electionresults e
+        JOIN constituency con ON e.constituencyID = con.constituencyID
+        JOIN county c ON con.countyID = c.countyID
+        GROUP BY c.countyName;
+    ''')
+
+    # Fetch the results
+    pr_results = cur.fetchall()
+    cur.close()
+
+    # Calculate the sum of total votes
+    total_votes_sum = sum(float(result['total_votes']) for result in pr_results)
+    print(total_votes_sum)
+
+    # Calculate the Hare Quota
+    hare_quota = total_votes_sum / 650
+
+    # Calculate whole number of seats allocated ( Whole number of votes for a party / Hare Quota )
+    seats_allocated = {}
+    for result in pr_results:
+        county_name = result['countyName']
+        total_votes = float(result['total_votes'])
+        seats_allocated[county_name] = total_votes // hare_quota
+    
+    # Calculate the remainder ( Total votes for a party - (Whole number of seats allocated * Hare Quota) )
+    remainder = {}
+    for result in pr_results:
+        county_name = result['countyName']
+        total_votes = float(result['total_votes'])
+        remainder[county_name] = total_votes - (seats_allocated[county_name] * hare_quota)
+
+    # Sort the remainder in descending order
+    sorted_remainder = sorted(remainder.items(), key=lambda x: x[1], reverse=True)
+
+    # Allocate the remaining seats
+    for i in range(650 - round(sum(seats_allocated.values()))):
+        county_name = sorted_remainder[i][0]
+        seats_allocated[county_name] += 1
+        
+    # Prepare data for template 
+    data_by_county = {}
+    for county_name, seat_count in seats_allocated.items():
+        data_by_county[county_name] = int(seat_count)
+    
+    return operation_name, data_by_county
+
+
+
+# General Election seats allocations based on Largest Remainder (By Region)
 
 
 if __name__ == '__main__':

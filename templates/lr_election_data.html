@@ -1,23 +1,19 @@
 <!DOCTYPE html>
 <html>
-    <form method="POST" action="/sprelectiondata">
+    <form method="POST" action="/lrelectiondata">
     <head>
         <title>Election System</title>
         <link rel="stylesheet" type="text/css" href="/static/style.css" />
     </head>
     <body>
         <input type="submit" name="back" value="Go Back">
-        <h1>Proportional Representation Data</h1>
+        <h1>Largest Remainder Data</h1>
         <h2>Via {{ data[0] }} </h2>
 
         <table>
             <tr>
-                {% if data[0] == "All Seats" or data[0] == "All Seats with 5% Threshold" %}
-                    <th>Party Name</th>
-                {% else %}
-                    <th>{{ data[0] }} Name</th>
-                {% endif %}
-                <th>Percentage of Seats</th>
+                <th>{{ data[0] }} Name</th>
+                <th>Remaining Seats</th>
             </tr>
             {% for key, value in data[1].items() %}
             <tr>

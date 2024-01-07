@@ -273,7 +273,7 @@ def calculate_election_lr(level=None):
     data = {name: {
                 'allocated_seats': allocated_seats[name]['seats'],
                 'remainder': allocated_seats[name]['remainder'],
-                'allocated_seats': (allocated_remainder[name] - allocated_seats[name]['seats']),
+                'allocated_remaining_seats': (allocated_remainder[name] - allocated_seats[name]['seats']),
                 'final_result': allocated_seats[name]['seats'] + (allocated_remainder[name] - allocated_seats[name]['seats'])
             } 
             for name in allocated_seats}
@@ -281,8 +281,6 @@ def calculate_election_lr(level=None):
     result_data = {operation_name: data}
 
     return operation_name, data
-
-
 
 
 #  General Election seats allocations based on D’Hondt (By County)

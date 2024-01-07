@@ -248,35 +248,39 @@ def calculate_election_lr(level=None):
     # Calculate the Hare Quota
     hare_quota = total_votes_sum / 650
 
-    # Calculate whole number of seats allocated ( Whole number of votes for a party / Hare Quota )
-    seats_allocated = {}
+    # allocated seats = total votes per party / Hare Quota and store remainder in a dictionary
+    allocated_seats = {}
     for result in pr_results:
-        geo_name = result['geo_name']
+        name = result['geo_name']
         total_votes = float(result['total_votes'])
-        seats_allocated[geo_name] = total_votes // hare_quota
-    
-    # Calculate the remainder ( Total votes for a party - (Whole number of seats allocated * Hare Quota) )
-    remainder = {}
-    for result in pr_results:
-        geo_name = result['geo_name']
-        total_votes = float(result['total_votes'])
-        remainder[geo_name] = total_votes - (seats_allocated[geo_name] * hare_quota)
+        allocated_seats[name] = {
+            'seats': int(total_votes / hare_quota),
+            'remainder': total_votes % hare_quota
+        }
 
-    # Sort the remainder in descending order
-    sorted_remainder = sorted(remainder.items(), key=lambda x: x[1], reverse=True)
+    # Sort the allocated seats by the remainder in descending order
+    allocated_seats = dict(sorted(allocated_seats.items(), key=lambda item: item[1]['remainder'], reverse=True))
 
-    # Allocate the remaining seats
-    for i in range(650 - round(sum(seats_allocated.values()))):
-        geo_name = sorted_remainder[i][0]
-        seats_allocated[geo_name] += 1
+    # remaining seats are allocated to parties with the highest remainders
+    # and if you reach the bottom with seats left, allocate the seats at the top
+    remaining_seats = 650 - sum(allocated_seats[name]['seats'] for name in allocated_seats)
+    allocated_remainder = {name: allocated_seats[name]['seats'] for name in allocated_seats}
 
-    # Prepare data for template
-    data_largest_remainder = {}
-    for geo_name, seat_count in seats_allocated.items():
-        data_largest_remainder[geo_name] = int(seat_count)
+    for name in sorted(allocated_seats.keys(), key=lambda x: allocated_seats[x]['remainder'], reverse=True)[:remaining_seats]:
+        allocated_remainder[name] += 1
 
-    return operation_name, data_largest_remainder
+    # Combine the operations to calculate allocated seats, remainder, and final result
+    data = {name: {
+                'allocated_seats': allocated_seats[name]['seats'],
+                'remainder': allocated_seats[name]['remainder'],
+                'allocated_seats': (allocated_remainder[name] - allocated_seats[name]['seats']),
+                'final_result': allocated_seats[name]['seats'] + (allocated_remainder[name] - allocated_seats[name]['seats'])
+            } 
+            for name in allocated_seats}
 
+    result_data = {operation_name: data}
+
+    return operation_name, data
 
 
 

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
-    <form method="POST" action="/lrelectiondata">
+
+<form method="POST" action="/lrelectiondata">
     <head>
         <title>Election System</title>
         <link rel="stylesheet" type="text/css" href="/static/style.css" />
@@ -8,19 +9,35 @@
     <body>
         <input type="submit" name="back" value="Go Back">
         <h1>Largest Remainder Data</h1>
-        <h2>Via {{ data[0] }} </h2>
+        
+        {% if data %}
+            <h2>Via {{ data[0] }}</h2>
 
-        <table>
-            <tr>
-                <th>{{ data[0] }} Name</th>
-                <th>Remaining Seats Allocated</th>
-            </tr>
-            {% for key, value in data[1].items() %}
-            <tr>
-                <td>{{ key }}</td>
-                <td>{{ value }}</td>
-            </tr>
-            {% endfor %}
-        </table>
+            <table>
+                <thead>
+                    <tr>
+                        <th>{{ data[0] }}</th>
+                        <th>Allocated Seats</th>
+                        <th>Remainder</th>
+                        <th>Allocated Seats</th>
+                        <th>Final Result</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for geo_name, result in data[1].items() %}
+                        <tr>
+                            <td>{{ geo_name }}</td>
+                            <td>{{ result.allocated_seats }}</td>
+                            <td>{{ result.remainder }}</td>
+                            <td>{{ result.allocated_seats }}</td>
+                            <td>{{ result.final_result }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No data available.</p>
+        {% endif %}
+        
     </body>
 </html>

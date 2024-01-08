@@ -110,6 +110,13 @@ def dhont():
         return render_template('view_data.html')
     else:
         return render_template('errorpage.html')
+    
+@app.route('/dhondtdata', methods=['GET', 'POST'])
+def dhondtdata():
+    if "back" in request.form:
+        return render_template('dhondt.html')
+    else:
+        return render_template('errorpage.html')
 
 @app.route('/errorpage', methods=['GET', 'POST'])
 def errorpage():

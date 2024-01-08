@@ -1,14 +1,38 @@
 from flask import Flask, render_template, request
 import mysql.connector
 import os
+import atexit
 
 app = Flask(__name__, static_url_path='/static')
 
-electoraldb = mysql.connector.connect(user=os.environ.get('DB_USER'), password=os.environ.get('DB_PASS'),
-                              host='100.102.58.61', database='electoralsystem',
-                              auth_plugin='mysql_native_password')
+# Initialize the database connection
+electoraldb = None
 
+try:
+    electoraldb = mysql.connector.connect(
+        user=os.environ.get('DB_USER'),
+        password=os.environ.get('DB_PASS'),
+        host='100.102.58.61',
+        database='electoralsystem',
+        auth_plugin='mysql_native_password'
+    )
+    print("Connected to the database.")
 
+except mysql.connector.Error as err:
+    print(f"Error: {err}")
+    # Handle the error (you might want to log it or provide a meaningful response to the user)
+    print("Exiting the system due to database connection error.")
+    exit(1)
+
+# Function to close the database connection
+def close_db():
+    global electoraldb
+    if electoraldb and electoraldb.is_connected():
+        electoraldb.close()
+        print("Disconnected from the database.")
+
+# Register the function to be called on exit
+atexit.register(close_db)
 
 
 @app.route('/', methods=['GET', 'POST'])

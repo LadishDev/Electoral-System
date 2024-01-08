@@ -33,6 +33,8 @@ def viewdata():
         return render_template('spr_election.html')
     elif "lrelection" in request.form:
         return render_template('lr_election.html')
+    elif "dhondt" in request.form:
+        return render_template('dhondt.html')
     elif "back" in request.form:
         return render_template('index.html')
     else:
@@ -93,6 +95,19 @@ def lrelection():
 def lrelectiondata():
     if "back" in request.form:
         return render_template('lr_election.html')
+    else:
+        return render_template('errorpage.html')
+    
+@app.route('/dhondt', methods=['GET', 'POST'])
+def dhont():
+    if "dhondtcounty" in request.form:
+        return render_template('dhondt_data.html', data=calculate_election_dhondt_by_county())
+    elif "dhontregion" in request.form:
+        return render_template('dhondt_data.html')
+    elif "dhontcountry" in request.form:
+        return render_template('dhondt_data.html')
+    elif "back" in request.form:
+        return render_template('view_data.html')
     else:
         return render_template('errorpage.html')
 
@@ -283,7 +298,57 @@ def calculate_election_lr(level=None):
     return operation_name, data
 
 
-#  General Election seats allocations based on D’Hondt (By County)
+# General Election seats allocations based on D’Hondt (By County)
+def calculate_election_dhondt_by_county():
+    operation_name = "County"
+    # Get data from the database
+    cur = electoraldb.cursor(dictionary=True)
+
+    # SQL query to get all the votes for each party by county
+    cur.execute('''
+        SELECT c.countyName AS geo_name, SUM(e.votes) AS total_votes
+        FROM electionresults e
+        JOIN constituency con ON e.constituencyID = con.constituencyID
+        JOIN county c ON con.countyID = c.countyID
+        GROUP BY geo_name
+        ORDER BY total_votes DESC;
+    ''')
+
+    # Fetch the results
+    pr_results = cur.fetchall()
+    cur.close()
+
+    # Sort the results by total votes in descending order
+    pr_results = sorted(pr_results, key=lambda x: x['total_votes'], reverse=True)
+
+    # Number of seats available (you can replace this with the actual number of seats)
+    num_seats = 650
+
+    # Initialize a dictionary to store allocated seats for each county
+    allocated_seats = {}
+
+    # Allocate seats using D'Hondt method
+    for result in pr_results:
+        name = result['geo_name']
+        total_votes = result['total_votes']
+        allocated_seats[name] = {
+            'votes': total_votes,
+            'seats': 0,
+            'votes_per_seat': total_votes,
+        }
+
+    for i in range(num_seats):
+        # Calculate the next allocation based on the D'Hondt method
+        next_allocation = max(allocated_seats, key=lambda x: allocated_seats[x]['votes_per_seat'])
+        allocated_seats[next_allocation]['seats'] += 1
+        allocated_seats[next_allocation]['votes_per_seat'] = total_votes / (allocated_seats[next_allocation]['seats'] + 1)
+
+    # Prepare data for template
+    data = {name: allocated_seats[name]['seats'] for name in allocated_seats}
+
+    return operation_name, data
+
+
 #  General Election seats allocations based on D’Hondt (By Region)
 #  General Election seats allocations based on D’Hondt (By Country)
 #  A system of your own

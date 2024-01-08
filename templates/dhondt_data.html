@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+
+<form method="POST" action="/dhondtelectiondata">
+    <head>
+        <title>Election System</title>
+        <link rel="stylesheet" type="text/css" href="/static/style.css" />
+    </head>
+    <body>
+        <input type="submit" name="back" value="Go Back">
+        <h1>D'Hondt Seat Allocation Data</h1>
+        <h2>Via {{ data[0] }}</h2>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>County</th>
+                    <th>Allocated Seats</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for geo_name, seats in data[1].items() %}
+                    <tr>
+                        <td>{{ geo_name }}</td>
+                        <td>{{ seats }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </body>
+</html>

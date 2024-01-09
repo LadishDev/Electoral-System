@@ -39,15 +39,8 @@ atexit.register(close_db)
 def index():
     return render_template('index.html')
 
+
 @app.route('/home', methods=['GET', 'POST'])
-def home():
-    if "viewdata" in request.form:
-        return render_template('view_data.html')
-    else:
-        return render_template('errorpage.html')
-
-
-@app.route('/viewdata', methods=['GET', 'POST'])
 def viewdata():
     if "viewalldata" in request.form:
         return render_template('view_all_data.html', data=view_all_data())
@@ -156,40 +149,114 @@ def view_all_data():
     data = cur.fetchall()
     return data
 
+'''
+    # Calculate total seats
+    total_seats = sum(details['seats'] for details in data.values())
+    print(f'Total seats: {total_seats}')
+
+    # Calculate party with most seats
+    most_seats = max(data, key=lambda x: data[x]['seats']) # winning party 
+    print(f'Party with most seats: {most_seats}')
+
+    # Calculate party with most votes
+
+
+    most_votes = max(data, key=lambda x: data[x]['votes']) # total votes
+    print(f'Party with most votes: {most_votes}')
+
+    # Combine party with most votes, most seats and total seats into a single dictionary
+    data.update({
+        'most_seats': most_seats,
+        'most_votes': most_votes,
+        'total_seats': total_seats
+    })
+    
+    # In the table - Votes, seats won, percentage of seats, percentage of votes, percentage of votes and percentage of seats, seats from diff winner
+'''
+
 
 def calculate_fptp_seats():
     cur = electoraldb.cursor()
 
-    # SQL query to get winning party in each constituency and count their seats
-    # Labor and Labour Co-oprative are the same party and should be combined into one to have correct seat count
+    # SQL query to get winning constituency in each region and sum their votes
     cur.execute('''
-                SELECT
-                    CASE WHEN partyName IN ('Labour', 'Labour and Co-operative') THEN 'Labour' ELSE partyName END AS combinedParty,
-                    COUNT(*) AS seat_count
-                FROM (
-                    SELECT e.constituencyID, p.partyName
-                    FROM electionresults e
-                    JOIN party p ON e.partyID = p.partyID
-                    JOIN (
-                        SELECT constituencyID, MAX(votes) AS winning_votes
-                        FROM electionresults
-                        GROUP BY constituencyID
-                    ) AS w ON e.constituencyID = w.constituencyID AND e.votes = w.winning_votes
-                ) AS winning_parties
-                GROUP BY combinedParty
-                ORDER BY seat_count DESC;
+            SELECT
+                p.partyName AS Party,
+                c.constituencyName AS Constituency,
+                e.votes AS Votes
+            FROM
+                electionresults e
+            JOIN
+                party p ON e.partyID = p.partyID
+            JOIN
+                constituency c ON e.constituencyID = c.constituencyID;
     ''')
 
     # Fetch the results
-    fptp_results = cur.fetchall()
-    # Prepare data for template
-    seats_data = {}
-    for party_name, seat_count in fptp_results:
-        seats_data[party_name] = seat_count
-
-    # Close the connection
+    data = cur.fetchall()
     cur.close()
-    return seats_data
+
+    # Create array of constituencies
+    totalConstituencies = 0
+    seats = 0
+    constituencies = []
+    partiesVotes = {}
+    partiesSeats = {}
+
+    for y in data:
+        if y[1] not in constituencies:
+            totalConstituencies += 1
+            constituencies.append(y[1])
+
+    for x in data:
+        if x[0] not in partiesVotes:
+            partiesVotes[x[0]] = 0
+
+    for x in data:
+        if x[0] not in partiesSeats:
+            partiesSeats[x[0]] = 0
+
+    for x in constituencies:
+        constituencyVotes = 0
+        winningParty = ""
+        winningVotes = 0
+        for y in data:
+            if y[1] == x:
+                constituencyVotes += y[2]
+                if y[2] > winningVotes:
+                    winningParty = y[0]
+                    winningVotes = y[2]
+
+        partiesVotes[winningParty] += winningVotes
+        partiesSeats[winningParty] += 1
+
+    for x in data:
+        partiesVotes[x[0]] += x[2]
+
+    for x in partiesSeats:
+        print("Party: ", x, "Votes: ", partiesSeats[x])
+
+
+    total_votes = sum(partiesVotes.values())
+
+    data_unsorted = {
+        party: {
+            'votes': partiesVotes[party], 
+            'seats': partiesSeats[party], 
+            'percentage_seats': "{:.2f}%".format(partiesSeats[party] / totalConstituencies * 100),  
+            'percentage_votes': "{:.2f}%".format(partiesVotes[party] / total_votes * 100),
+            'difference_in_seats_votes': "{:.2f}%".format(abs((partiesSeats[party] / totalConstituencies - partiesVotes[party] / total_votes) * 100))
+        } 
+        for party in partiesSeats.keys()
+    }
+
+    # Sort the data by the number of seats won
+    data = dict(sorted(data_unsorted.items(), key=lambda item: item[1]['seats'], reverse=True))
+
+    return data
+
+
+
 
 
 def calculate_election_spr(level=None, threshold=None):

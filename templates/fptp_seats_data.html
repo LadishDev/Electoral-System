@@ -1,25 +1,35 @@
 <!DOCTYPE html>
 <html>
+<head>
+    <title>Election System</title>
+    <link rel="stylesheet" type="text/css" href="/static/style.css" />
+</head>
+<body>
     <form method="POST" action="/fptpdata">
-    <head>
-        <title>Election System</title>
-        <link rel="stylesheet" type="text/css" href="/static/style.css" />
-    </head>
-    <body>
-        <input type = "submit" name="back" value="Go Back">
-        <h1>FPTP Seats Distribution</h1>
+        <input type="submit" name="back" value="Go Back">
+    </form>
 
-        <table>
-            <tr>
-                <th>Party</th>
-                <th>Seats</th>
-            </tr>
-            {% for party, seat_count in data.items() %}
+    <h1>FPTP Seats Distribution</h1>
+
+    <table>
+        <tr>
+            <th>Party</th>
+            <th>Votes</th>
+            <th>Seats Won</th>
+            <th>Percentage Of Seats</th>
+            <th>Percentage of Votes</th>
+            <th>Difference in Percentages</th>
+        </tr>
+        {% for party, details in data.items() %}
             <tr>
                 <td>{{ party }}</td>
-                <td>{{ seat_count }}</td>
+                <td>{{ details.votes }}</td>
+                <td>{{ details.seats }}</td>
+                <td>{{ details.percentage_seats }}</td>
+                <td>{{ details.percentage_votes }}</td>
+                <td>{{ details.difference_in_seats_votes }}</td>
             </tr>
-            {% endfor %}
-        </table>
-    </body>
+        {% endfor %}
+    </table>
+</body>
 </html>

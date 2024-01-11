@@ -167,30 +167,6 @@ def view_all_data():
     data = cur.fetchall()
     return data
 
-'''
-    # Calculate total seats
-    total_seats = sum(details['seats'] for details in data.values())
-    print(f'Total seats: {total_seats}')
-
-    # Calculate party with most seats
-    most_seats = max(data, key=lambda x: data[x]['seats']) # winning party 
-    print(f'Party with most seats: {most_seats}')
-
-    # Calculate party with most votes
-
-
-    most_votes = max(data, key=lambda x: data[x]['votes']) # total votes
-    print(f'Party with most votes: {most_votes}')
-
-    # Combine party with most votes, most seats and total seats into a single dictionary
-    data.update({
-        'most_seats': most_seats,
-        'most_votes': most_votes,
-        'total_seats': total_seats
-    })
-    
-    # In the table - Votes, seats won, percentage of seats, percentage of votes, percentage of votes and percentage of seats, seats from diff winner
-'''
 
 
 def calculate_fptp_seats():
@@ -225,10 +201,7 @@ def calculate_fptp_seats():
 
 
 
-
 def calculate_election_spr(level=None, threshold=None):
-
-    # Get data from the database
     cur = electoraldb.cursor(dictionary=True)
 
     # Determine the appropriate SQL query based on the specified level
@@ -267,22 +240,47 @@ def calculate_election_spr(level=None, threshold=None):
 
     # Execute the SQL query
     cur.execute(query)
-
-    # Fetch the results
     pr_results = cur.fetchall()
+
+    # Execute a SQL query to get the total number of unique constituencies
+    cur.execute("SELECT COUNT(DISTINCT constituencyName) FROM constituency")
+    total_seats = cur.fetchone()['COUNT(DISTINCT constituencyName)']
     cur.close()
 
     # Calculate the sum of total votes
     total_votes_sum = sum(float(result['total_votes']) for result in pr_results)
 
-    # Prepare data for template
+    # Calculate seats and prepare data for template
     proportional_data = {}
     for result in pr_results:
         name = result[group_by_column]
-        total_votes = float(result['total_votes'])
-        percentage_seats = (total_votes / total_votes_sum) * 100
-        proportional_data[name] = f"{percentage_seats:.2f}%"
-    
+        total_votes = int(result['total_votes'])
+        seats = int(total_votes / total_votes_sum * total_seats)
+        proportional_data[name] = {
+            'votes': total_votes,
+            'seats': seats,
+            'percentage_votes': f"{(total_votes / total_votes_sum) * 100:.2f}%",
+            'percentage_seats': f"{(seats / total_seats) * 100:.2f}%",
+            'difference_in_seats_votes': str(round(abs((seats / total_seats * 100) - (total_votes / total_votes_sum * 100)), 2)) + '%',
+            'seats_from_diff_winner': 0,  # Calculated this later
+            'has_most_seats': 0 # Calculated this later
+        }
+
+    # Assign remaining seats
+    remaining_seats = total_seats - sum(data['seats'] for data in proportional_data.values())
+    for name, data in sorted(proportional_data.items(), key=lambda item: item[1]['votes'] % 1, reverse=True):
+        if remaining_seats <= 0:
+            break
+        data['seats'] += 1
+        remaining_seats -= 1
+
+    # Update 'has_most_seats' field and calculate 'seats_from_diff_winner'
+    most_seats_party = max(proportional_data, key=lambda x: proportional_data[x]['seats'])
+    most_seats = proportional_data[most_seats_party]['seats']
+    for name, data in proportional_data.items():
+        data['has_most_seats'] = 'Yes' if name == most_seats_party else 'No'
+        data['seats_from_diff_winner'] = most_seats - data['seats'] if name != most_seats_party else 0
+
     return level, proportional_data
 
 # General Election seats allocations based on Largest Remainder ( County, Region, Country )

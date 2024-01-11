@@ -52,8 +52,6 @@ def viewdata():
         return render_template('lr_election.html')
     elif "dhondt" in request.form:
         return render_template('dhondt.html')
-    elif "back" in request.form:
-        return render_template('index.html')
     else:
         return render_template('errorpage.html')
     
@@ -145,7 +143,16 @@ def errorpage():
 
 def view_all_data():
     cur = electoraldb.cursor()
-    cur.execute('SELECT c1.firstname, c1.surname, c1.gender, p1.partyName, co1.constituencyName, co1.constituencyType, co2.countyName, r1.regionName, co3.countryName, co1.sittingmp, e1.votes FROM candidate c1 JOIN party p1 ON c1.partyID = p1.partyID JOIN constituency co1 ON c1.constituencyID = co1.constituencyID JOIN county co2 ON co1.countyID = co2.countyID JOIN region r1 ON co1.regionID = r1.regionID JOIN country co3 ON co1.countryID = co3.countryID LEFT JOIN electionresults e1 ON co1.constituencyID = e1.constituencyID AND c1.partyID = e1.partyID;')
+    cur.execute('''
+                SELECT c1.firstname, c1.surname, c1.gender, p1.partyName, co1.constituencyName, co1.constituencyType, co2.countyName, r1.regionName, co3.countryName, co1.sittingmp, c1.votes 
+                FROM candidate c1 
+                JOIN party p1 ON c1.partyID = p1.partyID 
+                JOIN constituency co1 ON c1.constituencyID = co1.constituencyID 
+                JOIN county co2 ON co1.countyID = co2.countyID 
+                JOIN region r1 ON co1.regionID = r1.regionID 
+                JOIN country co3 ON co1.countryID = co3.countryID;
+                ''')
+    
     data = cur.fetchall()
     return data
 
@@ -233,10 +240,8 @@ def calculate_fptp_seats():
     for x in data:
         partiesVotes[x[0]] += x[2]
 
-    for x in partiesSeats:
-        print("Party: ", x, "Votes: ", partiesSeats[x])
-
     total_votes = sum(partiesVotes.values())
+    most_seats = max(partiesSeats, key=partiesSeats.get)
 
     data_unsorted = {
         party: {
@@ -244,7 +249,8 @@ def calculate_fptp_seats():
             'seats': partiesSeats[party], 
             'percentage_seats': "{:.2f}%".format(partiesSeats[party] / totalConstituencies * 100),  
             'percentage_votes': "{:.2f}%".format(partiesVotes[party] / total_votes * 100),
-            'difference_in_seats_votes': "{:.2f}%".format(abs((partiesSeats[party] / totalConstituencies - partiesVotes[party] / total_votes) * 100))
+            'difference_in_seats_votes': "{:.2f}%".format(abs((partiesSeats[party] / totalConstituencies - partiesVotes[party] / total_votes) * 100)),
+            'seats_from_diff_winner': abs(partiesSeats[party] - partiesSeats[most_seats])
         } 
         for party in partiesSeats.keys()
     }

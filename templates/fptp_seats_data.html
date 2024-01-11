@@ -24,12 +24,12 @@
         {% for party, details in data.items() %}
             <tr>
                 <td>{{ party }}</td>
-                <td>{{ details.votes }}</td>
-                <td>{{ details.seats }}</td>
-                <td>{{ details.percentage_seats }}</td>
-                <td>{{ details.percentage_votes }}</td>
-                <td>{{ details.difference_in_seats_votes }}</td>
-                <td>{{ details.seats_from_diff_winner }}</td>
+                <td>{{ details['votes'] }}</td>
+                <td>{{ details['seats'] }}</td>
+                <td>{{ details['percentage_seats'] }}</td>
+                <td>{{ details['percentage_votes'] }}</td>
+                <td>{{ details['difference_in_seats_votes'] }}</td>
+                <td>{{ details['seats_from_diff_winner'] }}</td>
             </tr>
         {% endfor %}
     </table>

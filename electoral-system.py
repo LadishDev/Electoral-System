@@ -2,6 +2,7 @@ from flask import Flask, render_template, request
 import mysql.connector
 import os
 import atexit
+import subprocess
 
 app = Flask(__name__, static_url_path='/static')
 
@@ -17,6 +18,16 @@ try:
         auth_plugin='mysql_native_password'
     )
     print("Connected to the database.")
+    # if electionresults in db doesnt exist then run the script to create it
+    cur = electoraldb.cursor()
+    cur.execute("SHOW TABLES LIKE 'electionresults'")
+    result = cur.fetchone()
+    if result:
+        print("electionresults table exists")
+    else:
+        print("electionresults table does not exist")
+        subprocess.call(["python", "calculations.py"])
+        print("electionresults table created")
 
 except mysql.connector.Error as err:
     print(f"Error: {err}")
@@ -187,105 +198,30 @@ def calculate_fptp_seats():
 
     # SQL query to get winning constituency in each region and sum their votes
     cur.execute('''
-            SELECT
-                p.partyName AS Party,
-                c.constituencyName AS Constituency,
-                cd.votes AS Votes
-            FROM
-                candidate cd
-            JOIN
-                party p ON cd.partyID = p.partyID
-            JOIN
-                constituency c ON cd.constituencyID = c.constituencyID;
+            SELECT 
+                partyName AS Party,
+                votes AS Votes,
+                seats AS 'Seats Won',
+                percentage_seats AS 'Percentage Of Seats',
+                percentage_votes AS 'Percentage of Votes',
+                difference_in_seats_votes AS 'Difference in Percentages',
+                seats_from_diff_winner AS 'Seats Difference from Winner'
+            FROM 
+                electionresults
+            WHERE 
+                `system` = 'First Past The Post';   
     ''')
 
     # Fetch the results
     data = cur.fetchall()
     cur.close()
 
-    # Create array of constituencies
-    totalConstituencies = 0
-    seats = 0
-    constituencies = []
-    partiesVotes = {}
-    partiesSeats = {}
+    # Convert the data to a dictionary
+    data_dict = {row[0]: {'votes': row[1], 'seats': row[2], 'percentage_seats': row[3], 'percentage_votes': row[4], 'difference_in_seats_votes': row[5], 'seats_from_diff_winner': row[6]} for row in data}
 
-    for y in data:
-        if y[1] not in constituencies:
-            totalConstituencies += 1
-            constituencies.append(y[1])
-
-    for x in data:
-        if x[0] not in partiesVotes:
-            partiesVotes[x[0]] = 0
-
-    for x in data:
-        if x[0] not in partiesSeats:
-            partiesSeats[x[0]] = 0
-
-    for x in constituencies:
-        constituencyVotes = 0
-        winningParty = ""
-        winningVotes = 0
-        for y in data:
-            if y[1] == x:
-                constituencyVotes += y[2]
-                if y[2] > winningVotes:
-                    winningParty = y[0]
-                    winningVotes = y[2]
-
-        partiesVotes[winningParty] += winningVotes
-        partiesSeats[winningParty] += 1
-
-    for x in data:
-        partiesVotes[x[0]] += x[2]
-
-    total_votes = sum(partiesVotes.values())
-    most_seats = max(partiesSeats, key=partiesSeats.get)
-
-    data_unsorted = {
-        party: {
-            'votes': partiesVotes[party], 
-            'seats': partiesSeats[party], 
-            'percentage_seats': "{:.2f}%".format(partiesSeats[party] / totalConstituencies * 100),  
-            'percentage_votes': "{:.2f}%".format(partiesVotes[party] / total_votes * 100),
-            'difference_in_seats_votes': "{:.2f}%".format(abs((partiesSeats[party] / totalConstituencies - partiesVotes[party] / total_votes) * 100)),
-            'seats_from_diff_winner': abs(partiesSeats[party] - partiesSeats[most_seats])
-        } 
-        for party in partiesSeats.keys()
-    }
-
-    ## Create sql table for fptp seats
-    #cur.execute('''
-    #    CREATE TABLE fptpseats (
-    #        partyName VARCHAR(255),
-    #        votes INT,
-    #        seats INT,
-    #        percentage_seats VARCHAR(255),
-    #        percentage_votes VARCHAR(255),
-    #        difference_in_seats_votes VARCHAR(255)
-    #    );
-    #''')
-
-    # Insert data into fptpseats table
-    #for party in data_unsorted.keys():
-    #    cur.execute(f'''
-    #        INSERT INTO fptpseats VALUES (
-    #            '{party}',
-    #            {data_unsorted[party]['votes']},
-    #            {data_unsorted[party]['seats']},
-    #            '{data_unsorted[party]['percentage_seats']}',
-    #            '{data_unsorted[party]['percentage_votes']}',
-    #            '{data_unsorted[party]['difference_in_seats_votes']}'
-    #        );
-    #    ''')
-
-
-    # Sort the data by the number of seats won
-    data = dict(sorted(data_unsorted.items(), key=lambda item: item[1]['seats'], reverse=True))
-
-    return data
-
+    # Sort the dictionary by the number of seats won
+    sorted_data = dict(sorted(data_dict.items(), key=lambda item: item[1]['seats'], reverse=True))
+    return sorted_data
 
 
 
@@ -346,7 +282,7 @@ def calculate_election_spr(level=None, threshold=None):
         total_votes = float(result['total_votes'])
         percentage_seats = (total_votes / total_votes_sum) * 100
         proportional_data[name] = f"{percentage_seats:.2f}%"
-
+    
     return level, proportional_data
 
 # General Election seats allocations based on Largest Remainder ( County, Region, Country )

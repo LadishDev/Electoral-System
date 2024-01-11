@@ -60,14 +60,14 @@ def viewdata():
 @app.route('/viewalldata', methods=['GET', 'POST'])
 def viewalldata():
     if "back" in request.form:
-        return render_template('view_data.html')
+        return render_template('index.html')
     else:
         return render_template('errorpage.html')
     
 @app.route('/fptpdata', methods=['GET', 'POST'])
 def fptpdata():
     if "back" in request.form:
-        return render_template('view_data.html')
+        return render_template('index.html')
     else:
         return render_template('errorpage.html')
 
@@ -84,7 +84,7 @@ def sprelection():
     elif "electionsprcountry" in request.form:
         return render_template('spr_election_data.html', data=calculate_election_spr("Country"))
     elif "back" in request.form:
-        return render_template('view_data.html')
+        return render_template('index.html')
     else:
         return render_template('errorpage.html')
 
@@ -104,7 +104,7 @@ def lrelection():
     elif "lrelectioncountry" in request.form:
         return render_template('lr_election_data.html', data=calculate_election_lr("Country"))
     elif "back" in request.form:
-        return render_template('view_data.html')
+        return render_template('index.html')
     else:
         return render_template('errorpage.html')
     
@@ -124,7 +124,7 @@ def dhont():
     elif "dhondtcountry" in request.form:
         return render_template('dhondt_data.html', data=calculate_election_dhondt("Country"))
     elif "back" in request.form:
-        return render_template('view_data.html')
+        return render_template('index.html')
     else:
         return render_template('errorpage.html')
     
@@ -183,13 +183,13 @@ def calculate_fptp_seats():
             SELECT
                 p.partyName AS Party,
                 c.constituencyName AS Constituency,
-                e.votes AS Votes
+                cd.votes AS Votes
             FROM
-                electionresults e
+                candidate cd
             JOIN
-                party p ON e.partyID = p.partyID
+                party p ON cd.partyID = p.partyID
             JOIN
-                constituency c ON e.constituencyID = c.constituencyID;
+                constituency c ON cd.constituencyID = c.constituencyID;
     ''')
 
     # Fetch the results
@@ -236,7 +236,6 @@ def calculate_fptp_seats():
     for x in partiesSeats:
         print("Party: ", x, "Votes: ", partiesSeats[x])
 
-
     total_votes = sum(partiesVotes.values())
 
     data_unsorted = {
@@ -249,6 +248,32 @@ def calculate_fptp_seats():
         } 
         for party in partiesSeats.keys()
     }
+
+    ## Create sql table for fptp seats
+    #cur.execute('''
+    #    CREATE TABLE fptpseats (
+    #        partyName VARCHAR(255),
+    #        votes INT,
+    #        seats INT,
+    #        percentage_seats VARCHAR(255),
+    #        percentage_votes VARCHAR(255),
+    #        difference_in_seats_votes VARCHAR(255)
+    #    );
+    #''')
+
+    # Insert data into fptpseats table
+    #for party in data_unsorted.keys():
+    #    cur.execute(f'''
+    #        INSERT INTO fptpseats VALUES (
+    #            '{party}',
+    #            {data_unsorted[party]['votes']},
+    #            {data_unsorted[party]['seats']},
+    #            '{data_unsorted[party]['percentage_seats']}',
+    #            '{data_unsorted[party]['percentage_votes']}',
+    #            '{data_unsorted[party]['difference_in_seats_votes']}'
+    #        );
+    #    ''')
+
 
     # Sort the data by the number of seats won
     data = dict(sorted(data_unsorted.items(), key=lambda item: item[1]['seats'], reverse=True))
@@ -268,27 +293,28 @@ def calculate_election_spr(level=None, threshold=None):
     if level == "All Seats":
         query = '''
             SELECT partyName, SUM(votes) AS total_votes
-            FROM electionresults e
-            JOIN party p ON e.partyID = p.partyID
+            FROM candidate cd
+            JOIN party p ON cd.partyID = p.partyID
             GROUP BY partyName
             ORDER BY total_votes DESC;
         '''
         if threshold:
             query = f'''
                 SELECT partyName, SUM(votes) AS total_votes
-                FROM electionresults e
-                JOIN party p ON e.partyID = p.partyID
+                FROM candidate cd
+                JOIN party p ON cd.partyID = p.partyID
                 GROUP BY partyName
-                HAVING (SUM(votes) / (SELECT SUM(votes) FROM electionresults)) * 100 > {threshold}
+                HAVING (SUM(votes) / (SELECT SUM(votes) FROM candidate)) * 100 > {threshold}
                 ORDER BY total_votes DESC;
             '''
         group_by_column = 'partyName'
     elif level in ["County", "Region", "Country"]:
         column_name = level.lower() + "Name"
         query = f'''
-            SELECT {column_name}, SUM(e.votes) AS total_votes
-            FROM electionresults e
-            JOIN constituency con ON e.constituencyID = con.constituencyID
+            SELECT {column_name}, SUM(cd.votes) AS total_votes
+            FROM candidate cd
+            JOIN party p ON cd.partyID = p.partyID
+            JOIN constituency con ON cd.constituencyID = con.constituencyID
             JOIN {level.lower()} l ON con.{level.lower()}ID = l.{level.lower()}ID
             GROUP BY {column_name}
             ORDER BY total_votes DESC;
@@ -341,9 +367,9 @@ def calculate_election_lr(level=None):
 
     # SQL query to get all the votes for each party by the specified level
     cur.execute(f'''
-        SELECT {column_name} AS geo_name, SUM(e.votes) AS total_votes
-        FROM electionresults e
-        JOIN constituency con ON e.constituencyID = con.constituencyID
+        SELECT {column_name} AS geo_name, SUM(cd.votes) AS total_votes
+        FROM candidate cd
+        JOIN constituency con ON cd.constituencyID = con.constituencyID
         JOIN {join_table} ON {join_condition}
         GROUP BY geo_name
         ORDER BY total_votes DESC;
@@ -397,34 +423,34 @@ def calculate_election_dhondt(level=None):
     # Get data from the database based on the level
     if level == "County":
         query = '''
-            SELECT c.countyName AS geo_name, SUM(e.votes) AS total_votes
-            FROM electionresults e
-            JOIN constituency con ON e.constituencyID = con.constituencyID
+            SELECT c.countyName AS geo_name, SUM(cd.votes) AS total_votes
+            FROM candidate cd
+            JOIN constituency con ON cd.constituencyID = con.constituencyID
             JOIN county c ON con.countyID = c.countyID
             GROUP BY geo_name
             ORDER BY total_votes DESC;
         '''
     elif level == "Region":
         query = '''
-            SELECT r.regionName AS geo_name, SUM(e.votes) AS total_votes
-            FROM electionresults e
-            JOIN constituency con ON e.constituencyID = con.constituencyID
+            SELECT r.regionName AS geo_name, SUM(cd.votes) AS total_votes
+            FROM candidate cd
+            JOIN constituency con ON cd.constituencyID = con.constituencyID
             JOIN region r ON con.regionID = r.regionID
             GROUP BY geo_name
             ORDER BY total_votes DESC;
         '''
     elif level == "Country":
         query = '''
-            SELECT co.countryName AS geo_name, SUM(e.votes) AS total_votes
-            FROM electionresults e
-            JOIN constituency con ON e.constituencyID = con.constituencyID
+            SELECT co.countryName AS geo_name, SUM(cd.votes) AS total_votes
+            FROM candidate cd
+            JOIN constituency con ON cd.constituencyID = con.constituencyID
             JOIN country co ON con.countryID = co.countryID
             GROUP BY geo_name
             ORDER BY total_votes DESC;
         '''
     else:
         raise ValueError("Invalid level. Use 'County', 'Region', or 'Country'.")
-
+    
     # Get data from the database
     cur = electoraldb.cursor(dictionary=True)
     cur.execute(query)

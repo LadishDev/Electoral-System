@@ -20,7 +20,7 @@ try:
     print("Connected to the database.")
     # if electionresults in db doesnt exist then run the script to create it
     cur = electoraldb.cursor()
-    cur.execute("SHOW TABLES LIKE 'electionresults'")
+    cur.execute("SHOW TABLES LIKE 'electionresults';")
     result = cur.fetchone()
     if result:
         print("electionresults table exists")
@@ -87,11 +87,11 @@ def sprelection():
     elif "electionsprthreshold" in request.form:
         return render_template('spr_election_data.html', data=calculate_election_spr("All Seats", 5))
     elif "electionsprcounty" in request.form:
-        return render_template('spr_election_data.html', data=calculate_election_spr("County"))
+        return render_template('sort_by_data.html', data=calculate_election_spr("County"))
     elif "electionsprregion" in request.form:
-        return render_template('spr_election_data.html', data=calculate_election_spr("Region"))
+        return render_template('sort_by_data.html', data=calculate_election_spr("Region"))
     elif "electionsprcountry" in request.form:
-        return render_template('spr_election_data.html', data=calculate_election_spr("Country"))
+        return render_template('sort_by_data.html', data=calculate_election_spr("Country"))
     elif "back" in request.form:
         return render_template('index.html')
     else:
@@ -167,9 +167,7 @@ def view_all_data():
     data = cur.fetchall()
     return data
 
-
-
-def calculate_fptp_seats():
+def calculate_fptp_seats(level=None, threshold=None):
     cur = electoraldb.cursor()
 
     # SQL query to get winning constituency in each region and sum their votes
@@ -185,7 +183,7 @@ def calculate_fptp_seats():
             FROM 
                 electionresults
             WHERE 
-                `system` = 'First Past The Post';   
+                systemName = 'First Past The Post';   
     ''')
 
     # Fetch the results
@@ -200,87 +198,70 @@ def calculate_fptp_seats():
     return sorted_data
 
 
-
 def calculate_election_spr(level=None, threshold=None):
-    cur = electoraldb.cursor(dictionary=True)
+    operation_name = f"{level} - Threshold {threshold}%" if threshold is not None else level
+    # dictionary to store the data
+    page_info = {}
+    page_info['page_title'] = "Proportional Representation Data"
+    page_info['page_description'] = operation_name
+    cur = electoraldb.cursor()
 
-    # Determine the appropriate SQL query based on the specified level
+    # Make System Name for SQL query
     if level == "All Seats":
-        query = '''
-            SELECT partyName, SUM(votes) AS total_votes
-            FROM candidate cd
-            JOIN party p ON cd.partyID = p.partyID
-            GROUP BY partyName
-            ORDER BY total_votes DESC;
-        '''
+        system_name = "Proportional Representation"
         if threshold:
-            query = f'''
-                SELECT partyName, SUM(votes) AS total_votes
-                FROM candidate cd
-                JOIN party p ON cd.partyID = p.partyID
-                GROUP BY partyName
-                HAVING (SUM(votes) / (SELECT SUM(votes) FROM candidate)) * 100 > {threshold}
-                ORDER BY total_votes DESC;
-            '''
-        group_by_column = 'partyName'
-    elif level in ["County", "Region", "Country"]:
-        column_name = level.lower() + "Name"
-        query = f'''
-            SELECT {column_name}, SUM(cd.votes) AS total_votes
-            FROM candidate cd
-            JOIN party p ON cd.partyID = p.partyID
-            JOIN constituency con ON cd.constituencyID = con.constituencyID
-            JOIN {level.lower()} l ON con.{level.lower()}ID = l.{level.lower()}ID
-            GROUP BY {column_name}
-            ORDER BY total_votes DESC;
-        '''
-        group_by_column = column_name
+            system_name = "Proportional Representation Threshold"
     else:
-        raise ValueError("Invalid level specified")
+        system_name = f"Proportional Representation - {level}"
 
-    # Execute the SQL query
-    cur.execute(query)
-    pr_results = cur.fetchall()
+    if level == "All Seats":
+        cur.execute(f'''
+                    SELECT 
+                        partyName AS Party,
+                        votes AS Votes, 
+                        seats AS 'Seats Won', 
+                        percentage_seats AS 'Percentage Of Seats',
+                        percentage_votes AS 'Percentage of Votes', 
+                        difference_in_seats_votes AS 'Difference in Percentages'
+                    FROM 
+                        electionresults
+                    WHERE 
+                        systemName = '{system_name}'
+                    ''')
+        data = cur.fetchall()
+        # Convert the data to a dictionary
+        data_dict = {row[0]: {'votes': row[1], 'seats': row[2], 'percentage_seats': row[3], 'percentage_votes': row[4], 'difference_in_seats_votes': row[5]} for row in data}
+    elif level in ["County", "Region", "Country"]:
+        cur.execute(f'''
+                    SELECT 
+                        partyName AS Party,
+                        votes AS Votes, 
+                        seats AS 'Seats Won', 
+                        percentage_seats AS 'Percentage Of Seats',
+                        percentage_votes AS 'Percentage of Votes', 
+                        difference_in_seats_votes AS 'Difference in Percentages'
+                    FROM 
+                        electionresults
+                    WHERE 
+                        systemName = '{system_name}'
+                    ''')
+        data = cur.fetchall()
+        data_dict = {}
+        for row in data:
+            geo_name, party = row[0].split(" - ")
+            if geo_name not in data_dict:
+                data_dict[geo_name] = {}
+            data_dict[geo_name][party] = {'votes': row[1], 'seats': row[2], 'percentage_seats': row[3], 'percentage_votes': row[4], 'difference_in_seats_votes': row[5]}
 
-    # Execute a SQL query to get the total number of unique constituencies
-    cur.execute("SELECT COUNT(DISTINCT constituencyName) FROM constituency")
-    total_seats = cur.fetchone()['COUNT(DISTINCT constituencyName)']
+        # Sort by the number of seats won within each geo_name
+        for geo_name in data_dict:
+            data_dict[geo_name] = dict(sorted(data_dict[geo_name].items(), key=lambda item: item[1]['seats'], reverse=True))
+    else:
+        raise ValueError("Invalid level specified. Please choose from: 'All Seats', 'County', 'Region', 'Country'")
     cur.close()
+    return page_info, data_dict
 
-    # Calculate the sum of total votes
-    total_votes_sum = sum(float(result['total_votes']) for result in pr_results)
 
-    # Calculate seats and prepare data for template
-    proportional_data = {}
-    for result in pr_results:
-        name = result[group_by_column]
-        total_votes = int(result['total_votes'])
-        seats = int(total_votes / total_votes_sum * total_seats)
-        proportional_data[name] = {
-            'votes': total_votes,
-            'seats': seats,
-            'percentage_votes': f"{(total_votes / total_votes_sum) * 100:.2f}%",
-            'percentage_seats': f"{(seats / total_seats) * 100:.2f}%",
-            'difference_in_seats_votes': f"{abs((seats / total_seats * 100) - (total_votes / total_votes_sum * 100)):.2f}%",
-            'different_from_winner': 0,  # Calculated this later
-        }
-
-    # Assign remaining seats
-    remaining_seats = total_seats - sum(data['seats'] for data in proportional_data.values())
-    for name, data in sorted(proportional_data.items(), key=lambda item: item[1]['votes'] % 1, reverse=True):
-        if remaining_seats <= 0:
-            break   
-        data['seats'] += 1
-        remaining_seats -= 1
-
-    # Update 'has_most_seats' field and calculate 'seats_from_diff_winner'
-    most_seats_party = max(proportional_data, key=lambda x: proportional_data[x]['seats'])
-    most_seats = proportional_data[most_seats_party]['seats']
-    for name, data in proportional_data.items():
-        data['has_most_seats'] = 'Yes' if name == most_seats_party else 'No'
-        data['seats_from_diff_winner'] = most_seats - data['seats'] if name != most_seats_party else 0
-
-    return level, proportional_data
 
 # General Election seats allocations based on Largest Remainder ( County, Region, Country )
 def calculate_election_lr(level=None):

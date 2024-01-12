@@ -12,27 +12,23 @@
 
         <table>
             <tr>
-                {% if data[0] == "All Seats" or data[0] == "All Seats with 5% Threshold" %}
-                    <th>Party</th>
-                {% else %}
-                    <th>{{ data[0] }}</th>
-                {% endif %}
+                <th>Party</th>
                 <th>Votes</th>
                 <th>Seats Won</th>
                 <th>Percentage of Seats</th>
                 <th>Percentage of Votes</th>
                 <th>Difference in Percentages</th>
             </tr>
-            {% for party, details in data[1].items() %}
+            {% for party, party_data in data[1].items() %}
             <tr>
                 <td>{{ party }}</td>
-                <td>{{ details['votes'] }}</td>
-                <td>{{ details['seats'] }}</td>
-                <td>{{ details['percentage_seats'] }}</td>
-                <td>{{ details['percentage_votes'] }}</td>
-                <td>{{ details['difference_in_seats_votes'] }}</td>
+                <td>{{ party_data.votes }}</td>
+                <td>{{ party_data.seats }}</td>
+                <td>{{ party_data.percentage_seats }}</td>
+                <td>{{ party_data.percentage_votes }}</td>
+                <td>{{ party_data.difference_in_seats_votes }}</td>
             </tr>
-        {% endfor %}
+            {% endfor %}
         </table>
     </body>
 </html>

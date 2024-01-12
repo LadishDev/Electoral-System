@@ -15,7 +15,7 @@ print("Connected to the database.")
 cur = electoraldb.cursor()
 cur.execute('''
     CREATE TABLE IF NOT EXISTS electionresults (
-        `system` VARCHAR(255) NOT NULL,
+        systemName VARCHAR(255) NOT NULL,
         partyName VARCHAR(255) NOT NULL,
         votes INT NOT NULL,
         seats INT NOT NULL,
@@ -240,11 +240,15 @@ def calculate_spr(level=None, threshold=None):
     threshold_info = f" Threshold" if threshold else ""
     for name in proportional_data.keys():
         for party in proportional_data[name].keys():
+            if level != "All Seats":
+                party_concat = f"{name} - {party}" 
+            else:
+                party_concat = party
             cur.execute('''
                 INSERT INTO electionresults VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
             ''', (
                 f"{system_name}{level_info}{threshold_info}",
-                party,
+                party_concat,
                 proportional_data[name][party]['votes'],
                 proportional_data[name][party]['seats'],
                 proportional_data[name][party]['percentage_seats'],

@@ -1,13 +1,16 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
+    <form method="POST" action="/sortbydatapage">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Election Results</title>
+    <link rel="stylesheet" type="text/css" href="/static/style.css" />
 </head>
 <body>
+    <input type="submit" name="back" value="Go Back">
     {% if data %}
-        <h2>Via {{ data[0] }}</h2>
+        <h1>{{ data[0]['page_title'] }}</h1>
+        <h2>Via {{ data[0]['page_description'] }}</h2>
+        <br><br>
 
         {% for geo_name, parties in data[1].items() %}
             <h3>{{ geo_name }}</h3>

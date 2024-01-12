@@ -259,7 +259,106 @@ def calculate_spr(level=None, threshold=None):
     electoraldb.commit()
 
 def calculate_lr(level=None):
-    pass
+        # Get data from the database
+    cur = electoraldb.cursor(dictionary=True)
+
+    # Determine the column names and join table based on the specified level
+    if level == "County":
+        column_name = "c.countyName"
+        join_table = "county c"
+        join_condition = "con.countyID = c.countyID"
+    elif level == "Region":
+        column_name = "r.regionName"
+        join_table = "region r"
+        join_condition = "con.regionID = r.regionID"
+    elif level == "Country":
+        column_name = "co.countryName"
+        join_table = "country co"
+        join_condition = "con.countryID = co.countryID"
+    else:
+        raise ValueError("Invalid level specified. Please choose from: 'County', 'Region', 'Country'")
+
+    # SQL query to get all the votes for each party by the specified level
+    cur.execute(f'''
+        SELECT {column_name} AS geo_name, p.partyName AS party, SUM(cd.votes) AS total_votes
+        FROM candidate cd
+        JOIN party p ON cd.partyID = p.partyID
+        JOIN constituency con ON cd.constituencyID = con.constituencyID
+        JOIN {join_table} ON {join_condition}
+        GROUP BY geo_name, party;
+    ''')
+    # Fetch the results
+    pr_results = cur.fetchall()
+
+    # Calculate the sum of total votes
+    total_votes_sum = sum(float(result['total_votes']) for result in pr_results)
+
+    # Calculate the Hare Quota
+    hare_quota = total_votes_sum / 650
+
+    # allocated seats = total votes per party / Hare Quota and store remainder in a dictionary
+    allocated_seats = {}
+    for result in pr_results:
+        geo_name = result['geo_name']
+        party = result['party']
+        total_votes = float(result['total_votes'])
+        if geo_name not in allocated_seats:
+            allocated_seats[geo_name] = {}
+        allocated_seats[geo_name][party] = {
+            'votes': total_votes,
+            'seats': int(total_votes / hare_quota),
+            'remainder': total_votes % hare_quota
+        }
+
+    # Sort the allocated seats by the remainder in descending order
+    for geo_name in allocated_seats:
+        allocated_seats[geo_name] = dict(sorted(allocated_seats[geo_name].items(), key=lambda item: item[1]['remainder'], reverse=True))
+
+    # remaining seats are allocated to parties with the highest remainders
+    # and if you reach the bottom with seats left, allocate the seats at the top
+    remaining_seats = 650 - sum(sum(allocated_seats[geo_name][party]['seats'] for party in allocated_seats[geo_name]) for geo_name in allocated_seats)
+    allocated_remainder = {geo_name: {party: allocated_seats[geo_name][party]['seats'] for party in allocated_seats[geo_name]} for geo_name in allocated_seats}
+
+    for geo_name in allocated_seats:
+        for party in sorted(allocated_seats[geo_name].keys(), key=lambda x: allocated_seats[geo_name][x]['remainder'], reverse=True)[:remaining_seats]:
+            allocated_remainder[geo_name][party] += 1
+
+    data = {geo_name: {party: {
+                    'votes': int(allocated_seats[geo_name][party]['votes']),
+                    'seats': allocated_seats[geo_name][party]['seats'] + (allocated_remainder[geo_name][party] - allocated_seats[geo_name][party]['seats']),
+                    'percentage_seats': f"{((allocated_seats[geo_name][party]['seats'] + (allocated_remainder[geo_name][party] - allocated_seats[geo_name][party]['seats'])) / 650) * 100:.2f}%",
+                    'percentage_votes': f"{(allocated_seats[geo_name][party]['votes'] / total_votes_sum) * 100:.2f}%",
+                    'difference_in_seats_votes': f"{((allocated_seats[geo_name][party]['seats'] + (allocated_remainder[geo_name][party] - allocated_seats[geo_name][party]['seats'])) / 650) * 100 - (allocated_seats[geo_name][party]['votes'] / total_votes_sum) * 100:.2f}%",
+                    'different_from_winner': 0,  # Calculated this later
+                } 
+                for party in allocated_seats[geo_name]}
+            for geo_name in allocated_seats}
+    
+    # Calculate 'different_from_winner'
+    for geo_name in data:
+        # Find the party with the most seats
+        winner_party = max(data[geo_name], key=lambda party: data[geo_name][party]['seats'])
+        for party in data[geo_name]:
+            # Check if this party is different from the winner
+            data[geo_name][party]['different_from_winner'] = 'Yes' if party != winner_party else 'No'
+
+    for geo_name in data.keys():
+        system_concat = f"Largest Remainder - {level} - {geo_name}"
+        for party in data[geo_name].keys():
+            cur.execute('''
+                INSERT INTO electionresults VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
+            ''', (
+                system_concat,
+                party,
+                data[geo_name][party]['votes'],
+                data[geo_name][party]['seats'],
+                data[geo_name][party]['percentage_seats'],
+                data[geo_name][party]['percentage_votes'],
+                data[geo_name][party]['difference_in_seats_votes'],
+                data[geo_name][party]['different_from_winner']
+            ))
+    
+    electoraldb.commit()
 
 
 
@@ -273,6 +372,10 @@ print("Finished calculating FPTP results.")
 for level in levels:
     calculate_spr(level[0], level[1])
     print(f"Finished calculating SPR results for {level[0]}{' with ' + str(level[1]) + '% threshold' if level[1] else ''}.")
+
+for level in ['County', 'Region', 'Country']:
+    calculate_lr(level)
+    print(f"Finished calculating LR results for {level}.")
 
 
 cur.close()

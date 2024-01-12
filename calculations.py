@@ -239,16 +239,15 @@ def calculate_spr(level=None, threshold=None):
     level_info = f" - {level}" if level != "All Seats" else ""
     threshold_info = f" Threshold" if threshold else ""
     for name in proportional_data.keys():
+        system_concat = f"{system_name}{level_info}{threshold_info}"
+        if level != "All Seats":
+            system_concat += f" - {name}"
         for party in proportional_data[name].keys():
-            if level != "All Seats":
-                party_concat = f"{name} - {party}" 
-            else:
-                party_concat = party
             cur.execute('''
                 INSERT INTO electionresults VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
             ''', (
-                f"{system_name}{level_info}{threshold_info}",
-                party_concat,
+                system_concat,
+                party,
                 proportional_data[name][party]['votes'],
                 proportional_data[name][party]['seats'],
                 proportional_data[name][party]['percentage_seats'],
@@ -259,7 +258,8 @@ def calculate_spr(level=None, threshold=None):
     
     electoraldb.commit()
 
-
+def calculate_lr(level=None):
+    pass
 
 
 

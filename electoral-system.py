@@ -202,7 +202,7 @@ def calculate_election_spr(level=None, threshold=None):
     operation_name = f"{level} - Threshold {threshold}%" if threshold is not None else level
     # dictionary to store the data
     page_info = {}
-    page_info['page_title'] = "Proportional Representation Data"
+    page_info['page_title'] = "Election Results"
     page_info['page_description'] = operation_name
     cur = electoraldb.cursor()
 
@@ -233,26 +233,28 @@ def calculate_election_spr(level=None, threshold=None):
         data_dict = {row[0]: {'votes': row[1], 'seats': row[2], 'percentage_seats': row[3], 'percentage_votes': row[4], 'difference_in_seats_votes': row[5]} for row in data}
     elif level in ["County", "Region", "Country"]:
         cur.execute(f'''
-                    SELECT 
-                        partyName AS Party,
-                        votes AS Votes, 
-                        seats AS 'Seats Won', 
-                        percentage_seats AS 'Percentage Of Seats',
-                        percentage_votes AS 'Percentage of Votes', 
-                        difference_in_seats_votes AS 'Difference in Percentages'
-                    FROM 
-                        electionresults
-                    WHERE 
-                        systemName = '{system_name}'
-                    ''')
+                SELECT 
+                    systemName AS `System`,
+                    partyName AS Party,
+                    votes AS Votes, 
+                    seats AS 'Seats Won', 
+                    percentage_seats AS 'Percentage Of Seats',
+                    percentage_votes AS 'Percentage of Votes', 
+                    difference_in_seats_votes AS 'Difference in Percentages'
+                FROM 
+                    electionresults
+                WHERE 
+                    systemName LIKE 'Proportional Representation - {level}%'
+                ''')
         data = cur.fetchall()
         data_dict = {}
         for row in data:
-            geo_name, party = row[0].split(" - ")
+            system_parts = row[0].strip().split(" - ")
+            geo_name = system_parts[2]  # get the part of the systemName after the second -
+            party = row[1]
             if geo_name not in data_dict:
                 data_dict[geo_name] = {}
-            data_dict[geo_name][party] = {'votes': row[1], 'seats': row[2], 'percentage_seats': row[3], 'percentage_votes': row[4], 'difference_in_seats_votes': row[5]}
-
+            data_dict[geo_name][party] = {'votes': row[2], 'seats': row[3], 'percentage_seats': row[4], 'percentage_votes': row[5], 'difference_in_seats_votes': row[6]}
         # Sort by the number of seats won within each geo_name
         for geo_name in data_dict:
             data_dict[geo_name] = dict(sorted(data_dict[geo_name].items(), key=lambda item: item[1]['seats'], reverse=True))

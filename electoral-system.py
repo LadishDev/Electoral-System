@@ -181,7 +181,7 @@ def calculate_fptp_seats():
                 percentage_seats AS 'Percentage Of Seats',
                 percentage_votes AS 'Percentage of Votes',
                 difference_in_seats_votes AS 'Difference in Percentages',
-                seats_from_diff_winner AS 'Seats Difference from Winner'
+                different_from_winner AS 'Seats Difference from Winner'
             FROM 
                 electionresults
             WHERE 
@@ -193,7 +193,7 @@ def calculate_fptp_seats():
     cur.close()
 
     # Convert the data to a dictionary
-    data_dict = {row[0]: {'votes': row[1], 'seats': row[2], 'percentage_seats': row[3], 'percentage_votes': row[4], 'difference_in_seats_votes': row[5], 'seats_from_diff_winner': row[6]} for row in data}
+    data_dict = {row[0]: {'votes': row[1], 'seats': row[2], 'percentage_seats': row[3], 'percentage_votes': row[4], 'difference_in_seats_votes': row[5], 'difference_from_winner': row[6]} for row in data}
 
     # Sort the dictionary by the number of seats won
     sorted_data = dict(sorted(data_dict.items(), key=lambda item: item[1]['seats'], reverse=True))
@@ -261,16 +261,15 @@ def calculate_election_spr(level=None, threshold=None):
             'seats': seats,
             'percentage_votes': f"{(total_votes / total_votes_sum) * 100:.2f}%",
             'percentage_seats': f"{(seats / total_seats) * 100:.2f}%",
-            'difference_in_seats_votes': str(round(abs((seats / total_seats * 100) - (total_votes / total_votes_sum * 100)), 2)) + '%',
-            'seats_from_diff_winner': 0,  # Calculated this later
-            'has_most_seats': 0 # Calculated this later
+            'difference_in_seats_votes': f"{abs((seats / total_seats * 100) - (total_votes / total_votes_sum * 100)):.2f}%",
+            'different_from_winner': 0,  # Calculated this later
         }
 
     # Assign remaining seats
     remaining_seats = total_seats - sum(data['seats'] for data in proportional_data.values())
     for name, data in sorted(proportional_data.items(), key=lambda item: item[1]['votes'] % 1, reverse=True):
         if remaining_seats <= 0:
-            break
+            break   
         data['seats'] += 1
         remaining_seats -= 1
 
@@ -285,7 +284,6 @@ def calculate_election_spr(level=None, threshold=None):
 
 # General Election seats allocations based on Largest Remainder ( County, Region, Country )
 def calculate_election_lr(level=None):
-
     # Get data from the database
     cur = electoraldb.cursor(dictionary=True)
 
@@ -307,12 +305,12 @@ def calculate_election_lr(level=None):
 
     # SQL query to get all the votes for each party by the specified level
     cur.execute(f'''
-        SELECT {column_name} AS geo_name, SUM(cd.votes) AS total_votes
+        SELECT {column_name} AS geo_name, p.partyName AS party, SUM(cd.votes) AS total_votes
         FROM candidate cd
+        JOIN party p ON cd.partyID = p.partyID
         JOIN constituency con ON cd.constituencyID = con.constituencyID
         JOIN {join_table} ON {join_condition}
-        GROUP BY geo_name
-        ORDER BY total_votes DESC;
+        GROUP BY geo_name, party;
     ''')
 
     # Fetch the results
@@ -328,32 +326,39 @@ def calculate_election_lr(level=None):
     # allocated seats = total votes per party / Hare Quota and store remainder in a dictionary
     allocated_seats = {}
     for result in pr_results:
-        name = result['geo_name']
+        geo_name = result['geo_name']
+        party = result['party']
         total_votes = float(result['total_votes'])
-        allocated_seats[name] = {
+        if geo_name not in allocated_seats:
+            allocated_seats[geo_name] = {}
+        allocated_seats[geo_name][party] = {
+            'votes': total_votes,
             'seats': int(total_votes / hare_quota),
             'remainder': total_votes % hare_quota
         }
 
     # Sort the allocated seats by the remainder in descending order
-    allocated_seats = dict(sorted(allocated_seats.items(), key=lambda item: item[1]['remainder'], reverse=True))
+    for geo_name in allocated_seats:
+        allocated_seats[geo_name] = dict(sorted(allocated_seats[geo_name].items(), key=lambda item: item[1]['remainder'], reverse=True))
 
     # remaining seats are allocated to parties with the highest remainders
     # and if you reach the bottom with seats left, allocate the seats at the top
-    remaining_seats = 650 - sum(allocated_seats[name]['seats'] for name in allocated_seats)
-    allocated_remainder = {name: allocated_seats[name]['seats'] for name in allocated_seats}
+    remaining_seats = 650 - sum(sum(allocated_seats[geo_name][party]['seats'] for party in allocated_seats[geo_name]) for geo_name in allocated_seats)
+    allocated_remainder = {geo_name: {party: allocated_seats[geo_name][party]['seats'] for party in allocated_seats[geo_name]} for geo_name in allocated_seats}
 
-    for name in sorted(allocated_seats.keys(), key=lambda x: allocated_seats[x]['remainder'], reverse=True)[:remaining_seats]:
-        allocated_remainder[name] += 1
+    for geo_name in allocated_seats:
+        for party in sorted(allocated_seats[geo_name].keys(), key=lambda x: allocated_seats[geo_name][x]['remainder'], reverse=True)[:remaining_seats]:
+            allocated_remainder[geo_name][party] += 1
 
-    # Combine the operations to calculate allocated seats, remainder, and final result
-    data = {name: {
-                'allocated_seats': allocated_seats[name]['seats'],
-                'remainder': allocated_seats[name]['remainder'],
-                'allocated_remaining_seats': (allocated_remainder[name] - allocated_seats[name]['seats']),
-                'final_result': allocated_seats[name]['seats'] + (allocated_remainder[name] - allocated_seats[name]['seats'])
-            } 
-            for name in allocated_seats}
+    data = {geo_name: {party: {
+                    'votes': int(allocated_seats[geo_name][party]['votes']),
+                    'seats': allocated_seats[geo_name][party]['seats'] + (allocated_remainder[geo_name][party] - allocated_seats[geo_name][party]['seats']),
+                    'percentage_seats': f"{((allocated_seats[geo_name][party]['seats'] + (allocated_remainder[geo_name][party] - allocated_seats[geo_name][party]['seats'])) / 650) * 100:.2f}%",
+                    'percentage_votes': f"{(allocated_seats[geo_name][party]['votes'] / total_votes_sum) * 100:.2f}%",
+                    'difference_in_seats_votes': f"{((allocated_seats[geo_name][party]['seats'] + (allocated_remainder[geo_name][party] - allocated_seats[geo_name][party]['seats'])) / 650) * 100 - (allocated_seats[geo_name][party]['votes'] / total_votes_sum) * 100:.2f}%",
+                } 
+                for party in allocated_seats[geo_name]}
+            for geo_name in allocated_seats}
 
     return level, data
 

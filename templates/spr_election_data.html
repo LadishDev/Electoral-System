@@ -22,7 +22,6 @@
                 <th>Percentage of Seats</th>
                 <th>Percentage of Votes</th>
                 <th>Difference in Percentages</th>
-                <th>Seats Difference from Winner</th>
             </tr>
             {% for party, details in data[1].items() %}
             <tr>
@@ -32,7 +31,6 @@
                 <td>{{ details['percentage_seats'] }}</td>
                 <td>{{ details['percentage_votes'] }}</td>
                 <td>{{ details['difference_in_seats_votes'] }}</td>
-                <td>{{ details['seats_from_diff_winner'] }}</td>
             </tr>
         {% endfor %}
         </table>

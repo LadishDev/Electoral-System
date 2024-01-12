@@ -1,7 +1,6 @@
 import mysql.connector
 import os
 
-
 # Connect to the database
 electoraldb = mysql.connector.connect(
         user=os.environ.get('DB_USER'),
@@ -23,14 +22,11 @@ cur.execute('''
         percentage_seats VARCHAR(255) NOT NULL,
         percentage_votes VARCHAR(255) NOT NULL,
         difference_in_seats_votes VARCHAR(255) NOT NULL,
-        seats_from_diff_winner INT NOT NULL,
-        most_seats VARCHAR(3) NOT NULL
+        different_from_winner VARCHAR(3) NOT NULL
     );
 ''')
 
 def calculate_fptp():
-    cur = electoraldb.cursor()
-
     # SQL query to get winning constituency in each region and sum their votes
     cur.execute('''
             SELECT
@@ -47,7 +43,6 @@ def calculate_fptp():
 
     # Fetch the results
     data = cur.fetchall()
-    cur.close()
 
     # Create array of constituencies
     totalConstituencies = 0
@@ -96,14 +91,14 @@ def calculate_fptp():
             'percentage_seats': "{:.2f}%".format(partiesSeats[party] / totalConstituencies * 100),  
             'percentage_votes': "{:.2f}%".format(partiesVotes[party] / total_votes * 100),
             'difference_in_seats_votes': "{:.2f}%".format(abs((partiesSeats[party] / totalConstituencies - partiesVotes[party] / total_votes) * 100)),
-            'seats_from_diff_winner': abs(partiesSeats[party] - partiesSeats[most_seats])
+            'different_from_winner': 'Yes' if party == most_seats else 'No'
         } 
         for party in partiesSeats.keys()
     }
     ## Insert data into the table
     for party in data_unsorted.keys():
         cur.execute('''
-            INSERT INTO electionresults VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);
+            INSERT INTO electionresults VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
         ''', (
             'First Past The Post',  # replace with actual system name
             party,
@@ -112,12 +107,28 @@ def calculate_fptp():
             data_unsorted[party]['percentage_seats'],
             data_unsorted[party]['percentage_votes'],
             data_unsorted[party]['difference_in_seats_votes'],
-            data_unsorted[party]['seats_from_diff_winner'],
-            'Yes' if party == most_seats else 'No'  # Outputs 'Yes' if this party has the most seats, 'No' otherwise
+            data_unsorted[party]['different_from_winner']
         ))
 
     electoraldb.commit()
-    cur.close()
+
+def calculate_spr(level=None, threshold=None):
+    if level == 'All Seats':
+        print("Calculating All Seats results.")
+        if threshold:
+            print("Threshold: " + str(threshold) + "%.")
+    elif level in ['County', 'Region', 'Country']:
+        print("Calculating " + level + " results.")
 
 calculate_fptp()
+print("Finished calculating FPTP results.")
+
+# Make a Loop through calculate_spr() for each level and threshold. All Seats, All Seats 5%, County, Region, Country.
+
+levls = [['All Seats', None], ['All Seats 5%', 5], ['County', None], ['Region', None], ['Country', None]]
+for level in levls:
+    calculate_spr(level[0], level[1])
+    print("Finished calculating " + level[0] + " results.")
+
+cur.close()
 electoraldb.close()

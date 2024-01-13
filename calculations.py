@@ -375,9 +375,9 @@ def calculate_lr(level=None):
         remaining_seats = total_seats_sum - total_seats
 
     # Iterate over the aggregate data and prepare data for template
-    proportional_data = {}
+    largest_remainder_data = {}
     for party in party_seats:
-        proportional_data[party] = {
+        largest_remainder_data[party] = {
             'votes': party_seats[party]['votes'],
             'seats': party_seats[party]['seats'],
             'percentage_seats': f"{(party_seats[party]['seats'] / total_seats_sum) * 100:.2f}%",
@@ -387,27 +387,27 @@ def calculate_lr(level=None):
         }
 
     # Calculate 'different_from_winner'
-    for party in proportional_data:
+    for party in largest_remainder_data:
         # Find the party with the most seats
-        winner_party = max(proportional_data, key=lambda x: proportional_data[x]['seats'])
-        proportional_data[party]['different_from_winner'] = 'Yes' if party != winner_party else 'No'
+        winner_party = max(largest_remainder_data, key=lambda x: largest_remainder_data[x]['seats'])
+        largest_remainder_data[party]['different_from_winner'] = 'Yes' if party != winner_party else 'No'
 
     # Insert data into the table
-    for party in proportional_data.keys():
-        # Check if the party exists in the proportional_data dictionary
-        if party in proportional_data:
+    for party in largest_remainder_data.keys():
+        # Check if the party exists in the largest_remainder_data dictionary
+        if party in largest_remainder_data:
             system_concat = f"Largest Remainder - {level}"
             cur.execute('''
                 INSERT INTO electionresults VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
             ''', (
                 system_concat,
                 party,
-                proportional_data[party]['votes'],
-                proportional_data[party]['seats'],
-                proportional_data[party]['percentage_seats'],
-                proportional_data[party]['percentage_votes'],
-                proportional_data[party]['difference_in_seats_votes'],
-                proportional_data[party]['different_from_winner']
+                largest_remainder_data[party]['votes'],
+                largest_remainder_data[party]['seats'],
+                largest_remainder_data[party]['percentage_seats'],
+                largest_remainder_data[party]['percentage_votes'],
+                largest_remainder_data[party]['difference_in_seats_votes'],
+                largest_remainder_data[party]['different_from_winner']
             ))
 
     electoraldb.commit()

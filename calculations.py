@@ -241,7 +241,7 @@ def calculate_spr(level=None, threshold=None):
         for party in party_aggregate_data:
             percentage_seats = 0
             if party_seats[party] != 0:
-                percentage_seats = (party_aggregate_data[party]['seats'] / party_seats[party]) * 100
+                percentage_seats = (party_aggregate_data[party]['seats'] / party_seats[party]) * 100    
             proportional_data[party] = {
                 'votes': party_aggregate_data[party]['votes'],
                 'seats': party_aggregate_data[party]['seats'],
@@ -282,7 +282,7 @@ def calculate_spr(level=None, threshold=None):
 
 
 def calculate_lr(level=None):
-        # Get data from the database
+    # Get data from the database
     cur = electoraldb.cursor(dictionary=True)
 
     # Determine the column names and join table based on the specified level
@@ -313,74 +313,103 @@ def calculate_lr(level=None):
     # Fetch the results
     pr_results = cur.fetchall()
 
-    # Calculate the sum of total votes
-    total_votes_sum = sum(float(result['total_votes']) for result in pr_results)
-
-    # Calculate the Hare Quota
-    hare_quota = total_votes_sum / 650
-
-    # allocated seats = total votes per party / Hare Quota and store remainder in a dictionary
-    allocated_seats = {}
+    # Group the results by geo_name
+    grouped_results = {}
     for result in pr_results:
         geo_name = result['geo_name']
-        party = result['party']
-        total_votes = float(result['total_votes'])
-        if geo_name not in allocated_seats:
-            allocated_seats[geo_name] = {}
-        allocated_seats[geo_name][party] = {
-            'votes': total_votes,
-            'seats': int(total_votes / hare_quota),
-            'remainder': total_votes % hare_quota
+        if geo_name not in grouped_results:
+            grouped_results[geo_name] = []
+        grouped_results[geo_name].append(result)
+
+    # Initialize the dictionary to store total seats for each party
+    party_seats = {}
+
+    # Calculate the sum of total votes for the data set
+    total_votes_sum = sum(int(result['total_votes']) for result in pr_results)
+    # Calculate the sum of total seats for the data set
+    cur.execute('''SELECT COUNT(DISTINCT constituencyName) FROM constituency''')
+    total_seats_sum = cur.fetchone()['COUNT(DISTINCT constituencyName)']
+
+    # Iterate over each geo_name
+    for geo_name, results in grouped_results.items():
+        # Calculate the sum of total votes
+        geo_total_votes_sum = sum(float(result['total_votes']) for result in results)
+
+        # Calculate seats for each party based on the proportional representation formula for the current level
+        for result in results:
+            party = result['party']
+            total_votes = int(result['total_votes'])
+
+            # Calculate the quota
+            total_seats = len(results)  # total_seats is now the number of parties in the current level
+            quota = geo_total_votes_sum / total_seats
+
+            # Calculate the initial number of seats and the remainder for each party
+            seats = int(total_votes / quota)
+            remainder = total_votes % quota
+
+            # If the party is not yet in the aggregate data dictionary, add it
+            if party not in party_seats:
+                party_seats[party] = {
+                    'votes': 0,
+                    'seats': 0,
+                    'remainder': 0
+                }
+
+            # Update the aggregate data for the party
+            party_seats[party]['votes'] += total_votes
+            party_seats[party]['seats'] += seats
+            party_seats[party]['remainder'] += remainder
+
+    # Calculate the remaining seats
+    remaining_seats = total_seats_sum - total_seats
+
+    # Distribute the remaining seats to the parties with the largest remainders
+    while remaining_seats > 0:
+        # Find the party with the largest remainder
+        party_with_largest_remainder = max(party_seats, key=lambda party: party_seats[party]['remainder'])
+        # Allocate one seat to the party with the largest remainder
+        party_seats[party_with_largest_remainder]['seats'] += 1
+        # Update total_seats and remaining_seats
+        total_seats = sum(party_seats[party]['seats'] for party in party_seats)
+        remaining_seats = total_seats_sum - total_seats
+
+    # Iterate over the aggregate data and prepare data for template
+    proportional_data = {}
+    for party in party_seats:
+        proportional_data[party] = {
+            'votes': party_seats[party]['votes'],
+            'seats': party_seats[party]['seats'],
+            'percentage_seats': f"{(party_seats[party]['seats'] / total_seats_sum) * 100:.2f}%",
+            'percentage_votes': f"{(party_seats[party]['votes'] / total_votes_sum) * 100:.2f}%",
+            'difference_in_seats_votes': f"{abs(((party_seats[party]['seats'] / total_seats_sum) * 100) - ((party_seats[party]['votes'] / total_votes_sum) * 100)):.2f}%" if party_seats[party]['seats'] != 0 else "0.00%",
+            'different_from_winner': 0,  # Calculated this later
         }
 
-    # Sort the allocated seats by the remainder in descending order
-    for geo_name in allocated_seats:
-        allocated_seats[geo_name] = dict(sorted(allocated_seats[geo_name].items(), key=lambda item: item[1]['remainder'], reverse=True))
-
-    # remaining seats are allocated to parties with the highest remainders
-    # and if you reach the bottom with seats left, allocate the seats at the top
-    remaining_seats = 650 - sum(sum(allocated_seats[geo_name][party]['seats'] for party in allocated_seats[geo_name]) for geo_name in allocated_seats)
-    allocated_remainder = {geo_name: {party: allocated_seats[geo_name][party]['seats'] for party in allocated_seats[geo_name]} for geo_name in allocated_seats}
-
-    for geo_name in allocated_seats:
-        for party in sorted(allocated_seats[geo_name].keys(), key=lambda x: allocated_seats[geo_name][x]['remainder'], reverse=True)[:remaining_seats]:
-            allocated_remainder[geo_name][party] += 1
-
-    data = {geo_name: {party: {
-                    'votes': int(allocated_seats[geo_name][party]['votes']),
-                    'seats': allocated_seats[geo_name][party]['seats'] + (allocated_remainder[geo_name][party] - allocated_seats[geo_name][party]['seats']),
-                    'percentage_seats': f"{((allocated_seats[geo_name][party]['seats'] + (allocated_remainder[geo_name][party] - allocated_seats[geo_name][party]['seats'])) / 650) * 100:.2f}%",
-                    'percentage_votes': f"{(allocated_seats[geo_name][party]['votes'] / total_votes_sum) * 100:.2f}%",
-                    'difference_in_seats_votes': f"{((allocated_seats[geo_name][party]['seats'] + (allocated_remainder[geo_name][party] - allocated_seats[geo_name][party]['seats'])) / 650) * 100 - (allocated_seats[geo_name][party]['votes'] / total_votes_sum) * 100:.2f}%",
-                    'different_from_winner': 0,  # Calculated this later
-                } 
-                for party in allocated_seats[geo_name]}
-            for geo_name in allocated_seats}
-    
     # Calculate 'different_from_winner'
-    for geo_name in data:
+    for party in proportional_data:
         # Find the party with the most seats
-        winner_party = max(data[geo_name], key=lambda party: data[geo_name][party]['seats'])
-        for party in data[geo_name]:
-            # Check if this party is different from the winner
-            data[geo_name][party]['different_from_winner'] = 'Yes' if party != winner_party else 'No'
+        winner_party = max(proportional_data, key=lambda x: proportional_data[x]['seats'])
+        proportional_data[party]['different_from_winner'] = 'Yes' if party != winner_party else 'No'
 
-    for geo_name in data.keys():
-        system_concat = f"Largest Remainder - {level} - {geo_name}"
-        for party in data[geo_name].keys():
+    # Insert data into the table
+    for party in proportional_data.keys():
+        # Check if the party exists in the proportional_data dictionary
+        if party in proportional_data:
+            system_concat = f"Largest Remainder - {level}"
             cur.execute('''
                 INSERT INTO electionresults VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
             ''', (
                 system_concat,
                 party,
-                data[geo_name][party]['votes'],
-                data[geo_name][party]['seats'],
-                data[geo_name][party]['percentage_seats'],
-                data[geo_name][party]['percentage_votes'],
-                data[geo_name][party]['difference_in_seats_votes'],
-                data[geo_name][party]['different_from_winner']
+                proportional_data[party]['votes'],
+                proportional_data[party]['seats'],
+                proportional_data[party]['percentage_seats'],
+                proportional_data[party]['percentage_votes'],
+                proportional_data[party]['difference_in_seats_votes'],
+                proportional_data[party]['different_from_winner']
             ))
-    
+
     electoraldb.commit()
 
 

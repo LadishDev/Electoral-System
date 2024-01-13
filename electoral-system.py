@@ -367,9 +367,6 @@ def calculate_election_dhondt(level=None):
     return level, data
 
 
-
-
-
 #  A system of your own
 
 if __name__ == '__main__':

@@ -56,7 +56,7 @@ def viewdata():
     if "viewalldata" in request.form:
         return render_template('view_all_data.html', data=view_all_data())
     elif "fptpseats" in request.form:
-        return render_template('sort_data.html', data=fptp_seats())
+        return render_template('view_data.html', data=fptp_seats())
     elif "sprelection" in request.form:  
         return render_template('spr_election.html')
     elif "lrelection" in request.form:
@@ -76,15 +76,15 @@ def viewalldata():
 @app.route('/sprelection', methods=['GET', 'POST'])
 def sprelection():
     if "electionspr" in request.form:
-        return render_template('sort_data.html', data=election_spr("All Seats"))
+        return render_template('view_data.html', data=election_spr("All Seats"))
     elif "electionsprthreshold" in request.form:
-        return render_template('sort_data.html', data=election_spr("All Seats", 5))
+        return render_template('view_data.html', data=election_spr("All Seats", 5))
     elif "electionsprcounty" in request.form:
-        return render_template('sort_data.html', data=election_spr("County"))
+        return render_template('view_data.html', data=election_spr("County"))
     elif "electionsprregion" in request.form:
-        return render_template('sort_data.html', data=election_spr("Region"))
+        return render_template('view_data.html', data=election_spr("Region"))
     elif "electionsprcountry" in request.form:
-        return render_template('sort_data.html', data=election_spr("Country"))
+        return render_template('view_data.html', data=election_spr("Country"))
     elif "back" in request.form:
         return render_template('index.html')
     else:
@@ -93,11 +93,11 @@ def sprelection():
 @app.route('/lrelection', methods=['GET', 'POST'])
 def lrelection():
     if "lrelectioncounty" in request.form:
-        return render_template('sort_by_data.html', data=election_lr("County"))
+        return render_template('view_data.html', data=election_lr("County"))
     elif "lrelectionregion" in request.form:
-        return render_template('sort_by_data.html', data=election_lr("Region"))
+        return render_template('view_data.html', data=election_lr("Region"))
     elif "lrelectioncountry" in request.form:
-        return render_template('sort_by_data.html', data=election_lr("Country"))
+        return render_template('view_data.html', data=election_lr("Country"))
     elif "back" in request.form:
         return render_template('index.html')
     else:
@@ -285,21 +285,10 @@ def election_lr(level=None):
     
     # Fetch the results
     data = cur.fetchall()
-
     # Convert the data to a dictionary
-    data_dict = {}
-    for row in data:
-        system_parts = row[0].strip().split(" - ")
-        geo_name = system_parts[2]  # get the part of the systemName after the second -
-        party = row[1]
-        if geo_name not in data_dict:
-            data_dict[geo_name] = {}
-        data_dict[geo_name][party] = {'votes': row[2], 'seats': row[3], 'percentage_seats': row[4], 'percentage_votes': row[5], 'difference_in_seats_votes': row[6]}
-
-    # Sort by the number of seats won within each geo_name
-    for geo_name in data_dict:
-        data_dict[geo_name] = dict(sorted(data_dict[geo_name].items(), key=lambda item: item[1]['seats'], reverse=True))
-
+    data_dict = {row[1]: {'votes': row[2], 'seats': row[3], 'percentage_seats': row[4], 'percentage_votes': row[5], 'difference_in_seats_votes': row[6]} for row in data}
+    #Order the dictionary by the number of seats won
+    data_dict = dict(sorted(data_dict.items(), key=lambda item: item[1]['seats'], reverse=True))
     cur.close()
     return page_info, data_dict
 

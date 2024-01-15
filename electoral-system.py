@@ -191,42 +191,20 @@ def fptp_seats():
     return page_info, data_dict
 
 def election_spr(level=None, threshold=None):
-    operation_name = f"{level} - Threshold {threshold}%" if threshold is not None else level
-    # dictionary to store the data
-    page_info = {}
-    page_info['page_title'] = "Proportional Representation Data"
-    page_info['page_description'] = operation_name
+    operation_name = f"{level} - Threshold {threshold}%" if threshold else level
+    page_info = {'page_title': "Proportional Representation Data", 'page_description': operation_name}
     cur = electoraldb.cursor()
 
-    # Make System Name for SQL query
-    if level == "All Seats":
-        system_name = "Proportional Representation"
-        if threshold:
-            system_name = "Proportional Representation Threshold"
-    else:
-        system_name = f"Proportional Representation - {level}"
+    system_name = "Proportional Representation"
+    if level != "All Seats":
+        system_name += f" - {level}"
+    elif threshold:
+        system_name += " Threshold"
 
-    if level == "All Seats":
-        cur.execute(f'''
-                    SELECT 
-                        partyName AS Party,
-                        votes AS Votes, 
-                        seats AS 'Seats Won', 
-                        percentage_seats AS 'Percentage Of Seats',
-                        percentage_votes AS 'Percentage of Votes', 
-                        difference_in_seats_votes AS 'Difference in Percentages'
-                    FROM 
-                        electionresults
-                    WHERE 
-                        systemName = '{system_name}'
-                    ''')
-        data = cur.fetchall()
-        # Convert the data to a dictionary
-        data_dict = {row[0]: {'votes': row[1], 'seats': row[2], 'percentage_seats': row[3], 'percentage_votes': row[4], 'difference_in_seats_votes': row[5]} for row in data}
-        #Order the dictionary by the number of seats won
-        data_dict = dict(sorted(data_dict.items(), key=lambda item: item[1]['seats'], reverse=True))
-    elif level in ["County", "Region", "Country"]:
-        cur.execute(f'''
+    if level not in ["All Seats", "County", "Region", "Country"]:
+        raise ValueError("Invalid level specified. Please choose from: 'All Seats', 'County', 'Region', 'Country'")
+
+    cur.execute(f'''
                 SELECT 
                     partyName AS Party,
                     votes AS Votes, 
@@ -237,15 +215,11 @@ def election_spr(level=None, threshold=None):
                 FROM 
                     electionresults
                 WHERE 
-                    systemName LIKE 'Proportional Representation - {level}%'
+                    systemName LIKE '{system_name}%'
                 ''')
-        data = cur.fetchall()
-        # Convert the data to a dictionary
-        data_dict = {row[0]: {'votes': row[1], 'seats': row[2], 'percentage_seats': row[3], 'percentage_votes': row[4], 'difference_in_seats_votes': row[5]} for row in data}
-        #Order the dictionary by the number of seats won
-        data_dict = dict(sorted(data_dict.items(), key=lambda item: item[1]['seats'], reverse=True))
-    else:
-        raise ValueError("Invalid level specified. Please choose from: 'All Seats', 'County', 'Region', 'Country'")
+    data = cur.fetchall()
+    data_dict = {row[0]: {'votes': row[1], 'seats': row[2], 'percentage_seats': row[3], 'percentage_votes': row[4], 'difference_in_seats_votes': row[5]} for row in data}
+    data_dict = dict(sorted(data_dict.items(), key=lambda item: item[1]['seats'], reverse=True))
     cur.close()
     return page_info, data_dict
 

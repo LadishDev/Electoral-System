@@ -122,22 +122,16 @@ def lrelectiondata():
 @app.route('/dhondt', methods=['GET', 'POST'])
 def dhont():
     if "dhondtcounty" in request.form:
-        return render_template('dhondt_data.html', data=calculate_election_dhondt("County"))
+        return render_template('view_data.html', data=election_dhondt("County"))
     elif "dhondtregion" in request.form:
-        return render_template('dhondt_data.html', data=calculate_election_dhondt("Region"))
+        return render_template('view_data.html', data=election_dhondt("Region"))
     elif "dhondtcountry" in request.form:
-        return render_template('dhondt_data.html', data=calculate_election_dhondt("Country"))
+        return render_template('view_data.html', data=election_dhondt("Country"))
     elif "back" in request.form:
         return render_template('index.html')
     else:
-        return render_template('errorpage.html')
-    
-@app.route('/dhondtdata', methods=['GET', 'POST'])
-def dhondtdata():
-    if "back" in request.form:
         return render_template('dhondt.html')
-    else:
-        return render_template('errorpage.html')
+    
 
 @app.route('/errorpage', methods=['GET', 'POST'])
 def errorpage():
@@ -253,7 +247,6 @@ def election_spr(level=None, threshold=None):
     else:
         raise ValueError("Invalid level specified. Please choose from: 'All Seats', 'County', 'Region', 'Country'")
     cur.close()
-    print (data_dict)
     return page_info, data_dict
 
 
@@ -296,76 +289,36 @@ def election_lr(level=None):
 
 
 # General Election seats allocations based on D'Hondt method ( County, Region, Country )
-def calculate_election_dhondt(level=None):
-    # Get data from the database based on the level
-    if level == "County":
-        query = '''
-            SELECT c.countyName AS geo_name, SUM(cd.votes) AS total_votes
-            FROM candidate cd
-            JOIN constituency con ON cd.constituencyID = con.constituencyID
-            JOIN county c ON con.countyID = c.countyID
-            GROUP BY geo_name
-            ORDER BY total_votes DESC;
-        '''
-    elif level == "Region":
-        query = '''
-            SELECT r.regionName AS geo_name, SUM(cd.votes) AS total_votes
-            FROM candidate cd
-            JOIN constituency con ON cd.constituencyID = con.constituencyID
-            JOIN region r ON con.regionID = r.regionID
-            GROUP BY geo_name
-            ORDER BY total_votes DESC;
-        '''
-    elif level == "Country":
-        query = '''
-            SELECT co.countryName AS geo_name, SUM(cd.votes) AS total_votes
-            FROM candidate cd
-            JOIN constituency con ON cd.constituencyID = con.constituencyID
-            JOIN country co ON con.countryID = co.countryID
-            GROUP BY geo_name
-            ORDER BY total_votes DESC;
-        '''
-    else:
-        raise ValueError("Invalid level. Use 'County', 'Region', or 'Country'.")
+def election_dhondt(level=None):
+    operation_name = f"{level}" if level is not None else level
+    # dictionary to store the data
+    page_info = {}
+    page_info['page_title'] = "D'Hondt Data"
+    page_info['page_description'] = operation_name
     
-    # Get data from the database
-    cur = electoraldb.cursor(dictionary=True)
-    cur.execute(query)
-
-    # Fetch the results
-    pr_results = cur.fetchall()
+    # Get data from the database based on the level
+    cur = electoraldb.cursor()
+    cur.execute(f'''
+            SELECT 
+                systemName AS `System`,
+                partyName AS Party,
+                votes AS Votes, 
+                seats AS 'Seats Won', 
+                percentage_seats AS 'Percentage Of Seats',
+                percentage_votes AS 'Percentage of Votes', 
+                difference_in_seats_votes AS 'Difference in Percentages'
+            FROM
+                electionresults
+            WHERE
+                systemName LIKE 'D''Hondt - {level}'
+            ''')
+    data = cur.fetchall()
     cur.close()
-
-    # Sort the results by total votes in descending order
-    pr_results = sorted(pr_results, key=lambda x: x['total_votes'], reverse=True)
-
-    # Number of seats available (you can replace this with the actual number of seats)
-    num_seats = 650
-
-    # Initialize a dictionary to store allocated seats for each level
-    allocated_seats = {}
-
-    # Allocate seats using D'Hondt method
-    for result in pr_results:
-        name = result['geo_name']
-        total_votes = result['total_votes']
-        allocated_seats[name] = {
-            'seats': 0,
-            'votes_per_seat': total_votes,
-        }
-
-    # Allocate seats proportionally
-    for i in range(num_seats):
-        # Calculate the next allocation based on the D'Hondt method
-        next_allocation = max(allocated_seats, key=lambda x: allocated_seats[x]['votes_per_seat'])
-        allocated_seats[next_allocation]['seats'] += 1
-        allocated_seats[next_allocation]['votes_per_seat'] = total_votes / (allocated_seats[next_allocation]['seats'] + 1)
-
-    # Prepare data for template
-    data = {name: allocated_seats[name]['seats'] for name in allocated_seats}
-
-    return level, data
-
+    # Convert the data to a dictionary
+    data_dict = {row[1]: {'votes': row[2], 'seats': row[3], 'percentage_seats': row[4], 'percentage_votes': row[5], 'difference_in_seats_votes': row[6]} for row in data}
+    #Order the dictionary by the number of seats won
+    data_dict = dict(sorted(data_dict.items(), key=lambda item: item[1]['seats'], reverse=True))
+    return page_info, data_dict
 
 #  A system of your own
 

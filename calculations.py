@@ -91,10 +91,16 @@ def calculate_fptp():
             'percentage_seats': "{:.2f}%".format(partiesSeats[party] / totalConstituencies * 100),  
             'percentage_votes': "{:.2f}%".format(partiesVotes[party] / total_votes * 100),
             'difference_in_seats_votes': "{:.2f}%".format(abs((partiesSeats[party] / totalConstituencies - partiesVotes[party] / total_votes) * 100)),
-            'different_from_winner': 'Yes' if party == most_seats else 'No'
+            'different_from_winner': 0 # Calculated this later
         } 
         for party in partiesSeats.keys()
     }
+
+    # Calculate 'different_from_winner'
+    for party in data_unsorted:
+        winner_party = max(data_unsorted, key=lambda x: data_unsorted[x]['seats'])
+        data_unsorted[party]['different_from_winner'] = 'No' if winner_party == 'Conservative' else 'Yes'
+
     ## Insert data into the table
     for party in data_unsorted.keys():
         cur.execute('''
@@ -186,13 +192,6 @@ def calculate_spr(level=None, threshold=None):
             data['seats'] += 1
             remaining_seats -= 1
 
-        # Update 'has_most_seats' field and calculate 'seats_from_diff_winner'
-        most_seats_party = max(proportional_data, key=lambda x: proportional_data[x]['seats'])
-        most_seats = proportional_data[most_seats_party]['seats']
-        for party, data in proportional_data.items():
-            data['has_most_seats'] = 'Yes' if party == most_seats_party else 'No'
-            data['seats_from_diff_winner'] = most_seats - data['seats'] if party != most_seats_party else 0
-
     elif level in ["County", "Region", "Country"]:
         party_seats = {}  # Initialize the dictionary to store total seats for each party
         # Iterate over the selected level and calculate seats for each party
@@ -251,11 +250,11 @@ def calculate_spr(level=None, threshold=None):
                 'different_from_winner': 0,  # Calculated this later
             }
 
-        # Calculate 'different_from_winner'
-        for party in proportional_data:
-            # Find the party with the most seats
-            winner_party = max(proportional_data, key=lambda x: proportional_data[x]['seats'])
-            proportional_data[party]['different_from_winner'] = 'Yes' if party != winner_party else 'No'
+    # Calculate 'different_from_winner'
+    for party in proportional_data:
+        # Find the party with the most seats
+        winner_party = max(proportional_data, key=lambda x: proportional_data[x]['seats'])
+        proportional_data[party]['different_from_winner'] = 'No' if winner_party == 'Conservative' else 'Yes'
 
     # Insert data into the table
     system_name = "Proportional Representation"
@@ -390,7 +389,7 @@ def calculate_lr(level=None):
     for party in largest_remainder_data:
         # Find the party with the most seats
         winner_party = max(largest_remainder_data, key=lambda x: largest_remainder_data[x]['seats'])
-        largest_remainder_data[party]['different_from_winner'] = 'Yes' if party != winner_party else 'No'
+        largest_remainder_data[party]['different_from_winner'] = 'No' if winner_party == 'Conservative' else 'Yes'
 
     # Insert data into the table
     for party in largest_remainder_data.keys():
@@ -412,22 +411,144 @@ def calculate_lr(level=None):
 
     electoraldb.commit()
 
+def calculate_dhondt(level=None):
+    # Get data from the database
+    cur = electoraldb.cursor(dictionary=True)
 
+    level_map = {
+        "County": ("county", "countyName", "countyID"),
+        "Region": ("region", "regionName", "regionID"),
+        "Country": ("country", "countryName", "countryID")
+    }
+
+    table, column_name, id_column = level_map[level]
+
+    # SQL query to get all the votes for each party by the specified level
+    cur.execute(f'''
+        SELECT {column_name} AS geo_name, p.partyName AS party, SUM(cd.votes) AS total_votes
+        FROM candidate cd
+        JOIN party p ON cd.partyID = p.partyID
+        JOIN constituency con ON cd.constituencyID = con.constituencyID
+        JOIN {table} ON {table}.{id_column} = con.{id_column}
+        GROUP BY geo_name, party;
+    ''')
+
+    # Fetch the results and get the unique levels
+    results = cur.fetchall()
+    unique_levels = set(result['geo_name'] for result in results)
+
+    # Initialize a dictionary to store the total seats and votes for each party
+    party_total_seats = {}
+    party_votes = {}
+
+    for level_name in unique_levels:
+        # Get the total seats for the current level
+        query = (f"""
+            SELECT
+                {table}.{column_name},
+                COUNT(DISTINCT c.constituencyName) AS 'total seats'
+            FROM
+                constituency c
+            LEFT JOIN
+                {table} ON c.{id_column} = {table}.{id_column}
+            WHERE
+                {table}.{column_name} = %s
+            GROUP BY
+                {table}.{column_name}
+        """, (level_name,))
+        
+
+        # Execute the query
+        cur.execute(*query)
+        total_seats = cur.fetchone()
+
+        # Get the unique parties in the current level
+        parties_in_level = set(row['party'] for row in results if row['geo_name'] == level_name)
+
+        # Initialize a list to store the votes and seats for each party
+        parties = []
+
+        for party_name in parties_in_level:
+            # Calculate the total votes for the current party
+            total_votes = sum(row['total_votes'] for row in results if row['party'] == party_name and row['geo_name'] == level_name)
+
+            # Add the party to the list
+            parties.append({'name': party_name, 'votes': total_votes, 'seats': 0})
+
+            # Save the votes for the current party
+            party_votes[party_name] = party_votes.get(party_name, 0) + total_votes
+
+        # Distribute the seats to the parties based on their votes
+        while sum(party['seats'] for party in parties) < total_seats['total seats']:
+            for party in parties:
+                party['quotient'] = party['votes'] / (party['seats'] + 1)
+
+            max_quotient = max(parties, key=lambda party: party['quotient'])
+            max_quotient['seats'] += 1
+
+            # Break the loop if the total number of seats allocated equals the total number of seats available
+            if sum(party['seats'] for party in parties) >= total_seats['total seats']:
+                break
+
+        # Calculate the total seats for each party
+        for party in parties:
+            party_total_seats[party['name']] = party_total_seats.get(party['name'], 0) + party['seats']
+
+    # Prepare data for template
+    dhont_data = {}
+    for party in party_total_seats:
+        dhont_data[party] = {
+            'votes': party_votes[party],
+            'seats': party_total_seats[party],
+            'percentage_seats': f"{(party_total_seats[party] / sum(party_total_seats.values())) * 100:.2f}%",
+            'percentage_votes': f"{(party_votes[party] / sum(party_votes.values())) * 100:.2f}%",
+            'difference_in_seats_votes': f"{abs(((party_total_seats[party] / sum(party_total_seats.values())) * 100) - float((party_votes[party] / sum(party_votes.values())) * 100)):.2f}%",
+            'different_from_winner': 0,  # Calculated this later
+        }
+
+    # Calculate 'different_from_winner'
+    for party in dhont_data:
+        # Find the party with the most seats
+        winner_party = max(dhont_data, key=lambda x: dhont_data[x]['seats'])
+        dhont_data[party]['different_from_winner'] = 'No' if winner_party == 'Conservative' else 'Yes'
+
+    # Insert data into the table
+    for party in dhont_data.keys():
+        # Check if the party exists in the dhont_data dictionary
+        if party in dhont_data:
+            system_concat = f"D'Hondt - {level}"
+            cur.execute('''
+                INSERT INTO electionresults VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
+            ''', (
+                system_concat,
+                party,
+                dhont_data[party]['votes'],
+                dhont_data[party]['seats'],
+                dhont_data[party]['percentage_seats'],
+                dhont_data[party]['percentage_votes'],
+                dhont_data[party]['difference_in_seats_votes'],
+                dhont_data[party]['different_from_winner']
+            ))
+
+    electoraldb.commit()
 
 
 ## CALL FUNCTIONS TO CALCULATE RESULTS FOR EACH SYSTEM AND STORE THEM IN THE DATABASE
-levels = [['All Seats', None], ['All Seats', 5], ['County', None], ['Region', None], ['Country', None]]        
 
 calculate_fptp()
 print("Finished calculating FPTP results.")
 
-for level in levels:
+for level in [['All Seats', None], ['All Seats', 5], ['County', None], ['Region', None], ['Country', None]]:
     calculate_spr(level[0], level[1])
     print(f"Finished calculating SPR results for {level[0]}{' with ' + str(level[1]) + '% threshold' if level[1] else ''}.")
 
 for level in ['County', 'Region', 'Country']:
     calculate_lr(level)
     print(f"Finished calculating LR results for {level}.")
+
+for level in ['County', 'Region', 'Country']:
+    calculate_dhondt(level)
+    print(f"Finished calculating D'Hondt results for {level}.")
 
 
 cur.close()

@@ -286,8 +286,6 @@ def election_lr(level=None):
     return page_info, data_dict
 
 
-
-
 # General Election seats allocations based on D'Hondt method ( County, Region, Country )
 def election_dhondt(level=None):
     operation_name = f"{level}" if level is not None else level

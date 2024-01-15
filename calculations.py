@@ -279,7 +279,6 @@ def calculate_spr(level=None, threshold=None):
     
     electoraldb.commit()
 
-
 def calculate_lr(level=None):
     # Get data from the database
     cur = electoraldb.cursor(dictionary=True)
@@ -329,6 +328,12 @@ def calculate_lr(level=None):
     cur.execute('''SELECT COUNT(DISTINCT constituencyName) FROM constituency''')
     total_seats_sum = cur.fetchone()['COUNT(DISTINCT constituencyName)']
 
+    # Calculate the quota
+    quota = total_votes_sum / total_seats_sum
+
+    # Initialize a dictionary to store the remainders for each party
+    party_remainders = {}
+
     # Iterate over each geo_name
     for geo_name, results in grouped_results.items():
         # Calculate the sum of total votes
@@ -338,10 +343,6 @@ def calculate_lr(level=None):
         for result in results:
             party = result['party']
             total_votes = int(result['total_votes'])
-
-            # Calculate the quota
-            total_seats = len(results)  # total_seats is now the number of parties in the current level
-            quota = geo_total_votes_sum / total_seats
 
             # Calculate the initial number of seats and the remainder for each party
             seats = int(total_votes / quota)
@@ -358,10 +359,10 @@ def calculate_lr(level=None):
             # Update the aggregate data for the party
             party_seats[party]['votes'] += total_votes
             party_seats[party]['seats'] += seats
-            party_seats[party]['remainder'] += remainder
+            party_seats[party]['remainder'] = remainder  # Store the remainder for later
 
     # Calculate the remaining seats
-    remaining_seats = total_seats_sum - total_seats
+    remaining_seats = total_seats_sum - sum(party_seats[party]['seats'] for party in party_seats)
 
     # Distribute the remaining seats to the parties with the largest remainders
     while remaining_seats > 0:
@@ -369,10 +370,10 @@ def calculate_lr(level=None):
         party_with_largest_remainder = max(party_seats, key=lambda party: party_seats[party]['remainder'])
         # Allocate one seat to the party with the largest remainder
         party_seats[party_with_largest_remainder]['seats'] += 1
-        # Update total_seats and remaining_seats
-        total_seats = sum(party_seats[party]['seats'] for party in party_seats)
-        remaining_seats = total_seats_sum - total_seats
-
+        # Remove the party from the remainder calculation
+        party_seats[party_with_largest_remainder]['remainder'] = 0
+        # Update remaining_seats
+        remaining_seats -= 1
     # Iterate over the aggregate data and prepare data for template
     largest_remainder_data = {}
     for party in party_seats:

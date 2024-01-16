@@ -259,7 +259,7 @@ def election_lr(level=None):
             FROM
                 electionresults
             WHERE
-                systemName = 'Largest Remainder - {level}%'
+                systemName = 'Largest Remainder - {level}'
             ''')
     
     # Fetch the results

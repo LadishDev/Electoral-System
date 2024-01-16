@@ -40,6 +40,17 @@ input {
     margin: 10px;
 }
 
+.data-summary {
+    padding: 10px;
+    margin: auto;
+    width: fit-content;
+    border: 3px solid rgb(167, 21, 216);
+}
+
+.data-summary h2 {
+    text-decoration: underline;
+}
+
 table {
     margin: auto;
     width: 95%;

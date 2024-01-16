@@ -202,6 +202,13 @@ def fptp_seats():
 
     # Sort the dictionary by the number of seats won
     data_dict = dict(sorted(data_dict.items(), key=lambda item: item[1]['seats'], reverse=True))
+
+    # Get the winning party and the difference in seats from the winner for the page info summary
+    winning_party = next(iter(data_dict))
+    winning_party_difference = data_dict[next(iter(data_dict))]['difference_from_winner']
+    page_info['system_winner'] = winning_party
+    page_info['different_from_winner'] = winning_party_difference
+
     return page_info, data_dict
 
 def election_spr(level=None, threshold=None):
@@ -225,16 +232,24 @@ def election_spr(level=None, threshold=None):
                     seats AS 'Seats Won', 
                     percentage_seats AS 'Percentage Of Seats',
                     percentage_votes AS 'Percentage of Votes', 
-                    difference_in_seats_votes AS 'Difference in Percentages'
+                    difference_in_seats_votes AS 'Difference in Percentages',
+                    different_from_winner AS 'Difference from Winner'
                 FROM 
                     electionresults
                 WHERE 
                     systemName = '{system_name}'
                 ''')
     data = cur.fetchall()
-    data_dict = {row[0]: {'votes': row[1], 'seats': row[2], 'percentage_seats': row[3], 'percentage_votes': row[4], 'difference_in_seats_votes': row[5]} for row in data}
-    data_dict = dict(sorted(data_dict.items(), key=lambda item: item[1]['seats'], reverse=True))
     cur.close()
+    data_dict = {row[0]: {'votes': row[1], 'seats': row[2], 'percentage_seats': row[3], 'percentage_votes': row[4], 'difference_in_seats_votes': row[5], 'difference_from_winner': row[6]} for row in data}
+    data_dict = dict(sorted(data_dict.items(), key=lambda item: item[1]['seats'], reverse=True))
+
+    # Get the winning party and the difference in seats from the winner for the page info summary
+    winning_party = next(iter(data_dict))
+    winning_party_difference = data_dict[next(iter(data_dict))]['difference_from_winner']
+    page_info['system_winner'] = winning_party
+    page_info['different_from_winner'] = winning_party_difference
+
     return page_info, data_dict
 
 # General Election seats allocations based on Largest Remainder ( County, Region, Country )
@@ -255,7 +270,8 @@ def election_lr(level=None):
                 seats AS 'Seats Won', 
                 percentage_seats AS 'Percentage Of Seats',
                 percentage_votes AS 'Percentage of Votes', 
-                difference_in_seats_votes AS 'Difference in Percentages'
+                difference_in_seats_votes AS 'Difference in Percentages',
+                different_from_winner AS 'Difference from Winner'
             FROM
                 electionresults
             WHERE
@@ -264,11 +280,18 @@ def election_lr(level=None):
     
     # Fetch the results
     data = cur.fetchall()
+    cur.close()
     # Convert the data to a dictionary
-    data_dict = {row[1]: {'votes': row[2], 'seats': row[3], 'percentage_seats': row[4], 'percentage_votes': row[5], 'difference_in_seats_votes': row[6]} for row in data}
+    data_dict = {row[1]: {'votes': row[2], 'seats': row[3], 'percentage_seats': row[4], 'percentage_votes': row[5], 'difference_in_seats_votes': row[6], 'difference_from_winner': row[7]} for row in data}
     #Order the dictionary by the number of seats won
     data_dict = dict(sorted(data_dict.items(), key=lambda item: item[1]['seats'], reverse=True))
-    cur.close()
+    
+    # Get the winning party and the difference in seats from the winner for the page info summary
+    winning_party = next(iter(data_dict))
+    winning_party_difference = data_dict[next(iter(data_dict))]['difference_from_winner']
+    page_info['system_winner'] = winning_party
+    page_info['different_from_winner'] = winning_party_difference
+    
     return page_info, data_dict
 
 # General Election seats allocations based on D'Hondt method ( County, Region, Country )
@@ -289,7 +312,8 @@ def election_dhondt(level=None):
                 seats AS 'Seats Won', 
                 percentage_seats AS 'Percentage Of Seats',
                 percentage_votes AS 'Percentage of Votes', 
-                difference_in_seats_votes AS 'Difference in Percentages'
+                difference_in_seats_votes AS 'Difference in Percentages',
+                different_from_winner AS 'Difference from Winner'
             FROM
                 electionresults
             WHERE
@@ -298,9 +322,16 @@ def election_dhondt(level=None):
     data = cur.fetchall()
     cur.close()
     # Convert the data to a dictionary
-    data_dict = {row[1]: {'votes': row[2], 'seats': row[3], 'percentage_seats': row[4], 'percentage_votes': row[5], 'difference_in_seats_votes': row[6]} for row in data}
+    data_dict = {row[1]: {'votes': row[2], 'seats': row[3], 'percentage_seats': row[4], 'percentage_votes': row[5], 'difference_in_seats_votes': row[6], 'difference_from_winner': row[7]} for row in data}
     #Order the dictionary by the number of seats won
     data_dict = dict(sorted(data_dict.items(), key=lambda item: item[1]['seats'], reverse=True))
+
+    # Get the winning party and the difference in seats from the winner for the page info summary
+    winning_party = next(iter(data_dict))
+    winning_party_difference = data_dict[next(iter(data_dict))]['difference_from_winner']
+    page_info['system_winner'] = winning_party
+    page_info['different_from_winner'] = winning_party_difference
+
     return page_info, data_dict
 
 def election_webster(level=None):
@@ -320,7 +351,8 @@ def election_webster(level=None):
                 seats AS 'Seats Won', 
                 percentage_seats AS 'Percentage Of Seats',
                 percentage_votes AS 'Percentage of Votes', 
-                difference_in_seats_votes AS 'Difference in Percentages'
+                difference_in_seats_votes AS 'Difference in Percentages',
+                different_from_winner AS 'Difference from Winner'
             FROM
                 electionresults
             WHERE
@@ -328,8 +360,15 @@ def election_webster(level=None):
             ''')
     data = cur.fetchall()
     cur.close()
-    data_dict = {row[1]: {'votes': row[2], 'seats': row[3], 'percentage_seats': row[4], 'percentage_votes': row[5], 'difference_in_seats_votes': row[6]} for row in data}
+    data_dict = {row[1]: {'votes': row[2], 'seats': row[3], 'percentage_seats': row[4], 'percentage_votes': row[5], 'difference_in_seats_votes': row[6], 'difference_from_winner': row[7]} for row in data}
     data_dict = dict(sorted(data_dict.items(), key=lambda item: item[1]['seats'], reverse=True))
+
+    # Get the winning party and the difference in seats from the winner for the page info summary
+    winning_party = next(iter(data_dict))
+    winning_party_difference = data_dict[next(iter(data_dict))]['difference_from_winner']
+    page_info['system_winner'] = winning_party
+    page_info['different_from_winner'] = winning_party_difference
+
     return page_info, data_dict
 
 #  A system of your own

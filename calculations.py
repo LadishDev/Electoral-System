@@ -215,7 +215,7 @@ def calculate_spr(level=None, threshold=None):
                 JOIN party ON candidate.partyID = party.partyID
                 WHERE {level.lower()}ID = (SELECT {level.lower()}ID FROM {level.lower()} WHERE {group_by_column} = '{name}')
             """)
-            total_seats = cur.fetchone()['COUNT(DISTINCT constituencyName)']
+            total_seats_sum = cur.fetchone()['COUNT(DISTINCT constituencyName)']
 
             # Calculate total votes for the current level
             total_votes_level = sum(int(result['total_votes']) for result in pr_results if result[group_by_column] == name)
@@ -226,7 +226,7 @@ def calculate_spr(level=None, threshold=None):
                 party = result['partyName']
                 total_votes = int(result['total_votes'])
 
-                seats = round(total_votes / total_votes_level * total_seats)
+                seats = round(total_votes / total_votes_level * total_seats_sum)
 
                 # If the party is not yet in the aggregate data dictionary, add it
                 if party not in party_aggregate_data:
@@ -247,17 +247,14 @@ def calculate_spr(level=None, threshold=None):
         # itercate over the aggregate data and prepare data for template
         proportional_data = {}
         for party in party_aggregate_data:
-            percentage_seats = 0
-            if party_seats[party] != 0:
-                percentage_seats = (party_aggregate_data[party]['seats'] / party_seats[party]) * 100    
             proportional_data[party] = {
                 'votes': party_aggregate_data[party]['votes'],
                 'seats': party_aggregate_data[party]['seats'],
                 'percentage_votes': f"{(party_aggregate_data[party]['votes'] / total_votes_sum) * 100:.2f}%",
-                'percentage_seats': f"{percentage_seats:.2f}%",
-                'difference_in_seats_votes': f"{abs((party_aggregate_data[party]['seats'] / party_seats[party] * 100) - (party_aggregate_data[party]['votes'] / total_votes_sum * 100)):.2f}%" if party_seats[party] != 0 else "0.00%",
+                'percentage_seats': f"{(party_aggregate_data[party]['seats'] / total_seats_sum ):.2f}%",
+                'difference_in_seats_votes': f"{abs((party_aggregate_data[party]['seats'] / total_seats_sum ) - (party_aggregate_data[party]['votes'] / total_votes_sum )):.2f}%",
                 'different_from_winner': 0,  # Calculated this later
-            }
+            }  
 
     # Calculate 'different_from_winner'
     for party in proportional_data:

@@ -222,8 +222,6 @@ def election_spr(level=None, threshold=None):
     cur.close()
     return page_info, data_dict
 
-
-
 # General Election seats allocations based on Largest Remainder ( County, Region, Country )
 def election_lr(level=None):
     operation_name = f"{level}" if level is not None else level
@@ -257,7 +255,6 @@ def election_lr(level=None):
     data_dict = dict(sorted(data_dict.items(), key=lambda item: item[1]['seats'], reverse=True))
     cur.close()
     return page_info, data_dict
-
 
 # General Election seats allocations based on D'Hondt method ( County, Region, Country )
 def election_dhondt(level=None):

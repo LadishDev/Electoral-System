@@ -13,7 +13,7 @@ try:
     electoraldb = mysql.connector.connect(
         user=os.environ.get('DB_USER'),
         password=os.environ.get('DB_PASS'),
-        host='100.102.58.61',
+        host='localhost',
         database='electoralsystem',
         auth_plugin='mysql_native_password'
     )
@@ -22,6 +22,7 @@ try:
     cur = electoraldb.cursor()
     cur.execute("SHOW TABLES LIKE 'electionresults';")
     result = cur.fetchone()
+    cur.close()
     if result:
         print("electionresults table exists")
     else:
@@ -106,7 +107,6 @@ def lrelection():
 @app.route('/sortdatapage', methods=['GET', 'POST'])
 def sprelectiondata():
     if "back" in request.form:
-        print("Referrer:", request.referrer)
         return redirect(request.referrer)
     else:
         return render_template('errorpage.html')
@@ -114,7 +114,6 @@ def sprelectiondata():
 @app.route('/sortbydatapage', methods=['GET', 'POST'])
 def lrelectiondata():
     if "back" in request.form:
-        print("Referrer:", request.referrer)
         return redirect(request.referrer)
     else:
         return render_template('errorpage.html')
@@ -215,7 +214,7 @@ def election_spr(level=None, threshold=None):
                 FROM 
                     electionresults
                 WHERE 
-                    systemName LIKE '{system_name}%'
+                    systemName = '{system_name}'
                 ''')
     data = cur.fetchall()
     data_dict = {row[0]: {'votes': row[1], 'seats': row[2], 'percentage_seats': row[3], 'percentage_votes': row[4], 'difference_in_seats_votes': row[5]} for row in data}
@@ -247,7 +246,7 @@ def election_lr(level=None):
             FROM
                 electionresults
             WHERE
-                systemName LIKE 'Largest Remainder - {level}%'
+                systemName = 'Largest Remainder - {level}%'
             ''')
     
     # Fetch the results
@@ -282,7 +281,7 @@ def election_dhondt(level=None):
             FROM
                 electionresults
             WHERE
-                systemName LIKE 'D''Hondt - {level}'
+                systemName = 'D''Hondt - {level}'
             ''')
     data = cur.fetchall()
     cur.close()
@@ -292,7 +291,13 @@ def election_dhondt(level=None):
     data_dict = dict(sorted(data_dict.items(), key=lambda item: item[1]['seats'], reverse=True))
     return page_info, data_dict
 
+def election_webster():
+    pass  # TODO
+
 #  A system of your own
+def election_own():
+    pass  # TODO
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0')

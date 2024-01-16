@@ -5,7 +5,7 @@ import os
 electoraldb = mysql.connector.connect(
         user=os.environ.get('DB_USER'),
         password=os.environ.get('DB_PASS'),
-        host='100.102.58.61',
+        host='localhost',
         database='electoralsystem',
         auth_plugin='mysql_native_password'
     )
@@ -165,32 +165,41 @@ def calculate_spr(level=None, threshold=None):
     if level == "All Seats":
         # Execute a SQL query to get the total number of unique constituencies
         cur.execute("SELECT COUNT(DISTINCT constituencyName) FROM constituency")
-        total_seats = cur.fetchone()['COUNT(DISTINCT constituencyName)']
+        total_seats_sum = cur.fetchone()['COUNT(DISTINCT constituencyName)']
+
+        # Initialize the proportional_data dictionary
+        proportional_data = {}
 
         # Calculate seats and prepare data for template
-        proportional_data = {}
+        temp_data = {}
         for result in pr_results:
             party = result['partyName']
             total_votes = int(result['total_votes'])
 
             # Calculate seats for "All Seats" based on the proportional representation formula
-            seats = int(total_votes / total_votes_sum * total_seats)
-            proportional_data[party] = {
-                'votes': total_votes,
-                'seats': seats,
-                'percentage_votes': f"{(total_votes / total_votes_sum) * 100:.2f}%",
-                'percentage_seats': f"{(seats / total_seats) * 100:.2f}%",
-                'difference_in_seats_votes': f"{abs((seats / total_seats * 100) - (total_votes / total_votes_sum * 100)):.2f}%",
-                'different_from_winner': 0,  # Calculated this later
-            }
+            seats = round(total_votes * total_seats_sum / total_votes_sum)  # Simple proportional representation
 
-        # Assign remaining seats
-        remaining_seats = total_seats - sum(data['seats'] for data in proportional_data.values())
-        for party, data in sorted(proportional_data.items(), key=lambda item: item[1]['votes'] % 1, reverse=True):
-            if remaining_seats <= 0:
-                break   
-            data['seats'] += 1
-            remaining_seats -= 1
+            # If the party is not yet in the aggregate data dictionary, add it
+            if party not in temp_data:
+                temp_data[party] = {
+                    'votes': 0,
+                    'seats': 0
+                }
+
+            # Update the aggregate data for the party
+            temp_data[party]['votes'] += total_votes
+            temp_data[party]['seats'] += seats
+
+        # Prepare data for template
+        for party in temp_data:
+            proportional_data[party] = {
+                'votes': temp_data[party]['votes'],
+                'seats': temp_data[party]['seats'],
+                'percentage_votes': f"{(temp_data[party]['votes'] / total_votes_sum) * 100:.2f}%",
+                'percentage_seats': f"{(temp_data[party]['seats'] / total_seats_sum) * 100:.2f}%",
+                'difference_in_seats_votes': f"{abs((temp_data[party]['seats'] / total_seats_sum) * 100 - (temp_data[party]['votes'] / total_votes_sum) * 100):.2f}%",
+                'different_from_winner': 0,  # Calculated this later
+        }
 
     elif level in ["County", "Region", "Country"]:
         party_seats = {}  # Initialize the dictionary to store total seats for each party
@@ -217,7 +226,7 @@ def calculate_spr(level=None, threshold=None):
                 party = result['partyName']
                 total_votes = int(result['total_votes'])
 
-                seats = int(total_votes / total_votes_level * total_seats)
+                seats = round(total_votes / total_votes_level * total_seats)
 
                 # If the party is not yet in the aggregate data dictionary, add it
                 if party not in party_aggregate_data:
@@ -374,6 +383,7 @@ def calculate_lr(level=None):
         party_seats[party_with_largest_remainder]['remainder'] = 0
         # Update remaining_seats
         remaining_seats -= 1
+
     # Iterate over the aggregate data and prepare data for template
     largest_remainder_data = {}
     for party in party_seats:
@@ -533,6 +543,11 @@ def calculate_dhondt(level=None):
 
     electoraldb.commit()
 
+def calculate_webster(level=None):
+    pass
+
+def calculate_ownsystem(level=None):
+    pass
 
 ## CALL FUNCTIONS TO CALCULATE RESULTS FOR EACH SYSTEM AND STORE THEM IN THE DATABASE
 
@@ -551,6 +566,15 @@ for level in ['County', 'Region', 'Country']:
     calculate_dhondt(level)
     print(f"Finished calculating D'Hondt results for {level}.")
 
+'''
+for level in ['County', 'Region', 'Country']:
+    calculate_webster(level)
+    print(f"Finished calculating Webster results for {level}.")
 
+for level in ['County', 'Region', 'Country']:
+    calculate_ownsystem(level)
+    print(f"Finished calculating Own System results for {level}.")
+'''
+    
 cur.close()
 electoraldb.close()

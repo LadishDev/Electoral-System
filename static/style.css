@@ -21,8 +21,23 @@ h1, h2, h3 {
     align-items: center;
 }
 
-.options-container input {
-    margin: 5px;
+input {
+    display: flex;
+    align-items: center;
+    font-family: inherit;
+    font-weight: 500;
+    font-size: 16px;
+    padding: 0.7em 1.4em 0.7em 1.1em;
+    color: white;
+    background: #ad5389;
+    background: linear-gradient(0deg, rgb(167, 21, 216) 0%, rgb(229, 41, 242) 100%);
+    border: none;
+    letter-spacing: 0.05em;
+    border-radius: 20em;
+    cursor: pointer;
+    user-select: none;
+    touch-action: manipulation;
+    margin: 10px;
 }
 
 table {

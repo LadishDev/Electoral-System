@@ -64,6 +64,8 @@ def viewdata():
         return render_template('lr_election.html')
     elif "dhondt" in request.form:
         return render_template('dhondt.html')
+    elif "webster" in request.form:
+        return render_template('webster.html')
     else:
         return render_template('index.html')
     
@@ -130,6 +132,19 @@ def dhont():
         return render_template('index.html')
     else:
         return render_template('dhondt.html')
+    
+@app.route('/webster', methods=['GET', 'POST'])
+def webster():
+    if "webstercounty" in request.form:
+        return render_template('view_data.html', data=election_webster("County"))
+    elif "websterregion" in request.form:
+        return render_template('view_data.html', data=election_webster("Region"))
+    elif "webstercountry" in request.form:
+        return render_template('view_data.html', data=election_webster("Country"))
+    elif "back" in request.form:
+        return render_template('index.html')
+    else:
+        return render_template('webster.html')
     
 
 @app.route('/errorpage', methods=['GET', 'POST'])
@@ -288,8 +303,34 @@ def election_dhondt(level=None):
     data_dict = dict(sorted(data_dict.items(), key=lambda item: item[1]['seats'], reverse=True))
     return page_info, data_dict
 
-def election_webster():
-    pass  # TODO
+def election_webster(level=None):
+    operation_name = f"{level}" if level is not None else level
+    # dictionary to store the data
+    page_info = {}
+    page_info['page_title'] = "Webster Data"
+    page_info['page_description'] = operation_name
+
+    # Get data from the database based on the level
+    cur = electoraldb.cursor()
+    cur.execute(f'''
+            SELECT 
+                systemName AS `System`,
+                partyName AS Party,
+                votes AS Votes, 
+                seats AS 'Seats Won', 
+                percentage_seats AS 'Percentage Of Seats',
+                percentage_votes AS 'Percentage of Votes', 
+                difference_in_seats_votes AS 'Difference in Percentages'
+            FROM
+                electionresults
+            WHERE
+                systemName = 'Webster - {level}'
+            ''')
+    data = cur.fetchall()
+    cur.close()
+    data_dict = {row[1]: {'votes': row[2], 'seats': row[3], 'percentage_seats': row[4], 'percentage_votes': row[5], 'difference_in_seats_votes': row[6]} for row in data}
+    data_dict = dict(sorted(data_dict.items(), key=lambda item: item[1]['seats'], reverse=True))
+    return page_info, data_dict
 
 #  A system of your own
 def election_own():

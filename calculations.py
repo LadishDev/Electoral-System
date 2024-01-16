@@ -541,7 +541,125 @@ def calculate_dhondt(level=None):
     electoraldb.commit()
 
 def calculate_webster(level=None):
-    pass
+        # Get data from the database
+    cur = electoraldb.cursor(dictionary=True)
+
+    level_map = {
+        "County": ("county", "countyName", "countyID"),
+        "Region": ("region", "regionName", "regionID"),
+        "Country": ("country", "countryName", "countryID")
+    }
+
+    table, column_name, id_column = level_map[level]
+
+    # SQL query to get all the votes for each party by the specified level
+    cur.execute(f'''
+        SELECT {column_name} AS geo_name, p.partyName AS party, SUM(cd.votes) AS total_votes
+        FROM candidate cd
+        JOIN party p ON cd.partyID = p.partyID
+        JOIN constituency con ON cd.constituencyID = con.constituencyID
+        JOIN {table} ON {table}.{id_column} = con.{id_column}
+        GROUP BY geo_name, party;
+    ''')
+
+    # Fetch the results and get the unique levels
+    results = cur.fetchall()
+    unique_levels = set(result['geo_name'] for result in results)
+
+    # Initialize a dictionary to store the total seats and votes for each party
+    party_total_seats = {}
+    party_votes = {}
+
+    for level_name in unique_levels:
+        # Get the total seats for the current level
+        query = (f"""
+            SELECT
+                {table}.{column_name},
+                COUNT(DISTINCT c.constituencyName) AS 'total seats'
+            FROM
+                constituency c
+            LEFT JOIN
+                {table} ON c.{id_column} = {table}.{id_column}
+            WHERE
+                {table}.{column_name} = %s
+            GROUP BY
+                {table}.{column_name}
+        """, (level_name,))
+        
+
+        # Execute the query
+        cur.execute(*query)
+        total_seats = cur.fetchone()
+
+        # Get the unique parties in the current level
+        parties_in_level = set(row['party'] for row in results if row['geo_name'] == level_name)
+
+        # Initialize a list to store the votes and seats for each party
+        parties = []
+
+        for party_name in parties_in_level:
+            # Calculate the total votes for the current party
+            total_votes = sum(row['total_votes'] for row in results if row['party'] == party_name and row['geo_name'] == level_name)
+
+            # Add the party to the list
+            parties.append({'name': party_name, 'votes': total_votes, 'seats': 0})
+
+            # Save the votes for the current party
+            party_votes[party_name] = party_votes.get(party_name, 0) + total_votes
+
+        # Distribute the seats to the parties based on their votes
+        while sum(party['seats'] for party in parties) < total_seats['total seats']:
+            for party in parties:
+                party['quotient'] = party['votes'] / (2 * party['seats'] + 1)
+
+            max_quotient = max(parties, key=lambda party: party['quotient'])
+            max_quotient['seats'] += 1
+
+            # Break the loop if the total number of seats allocated equals the total number of seats available
+            if sum(party['seats'] for party in parties) >= total_seats['total seats']:
+                break
+
+        # Calculate the total seats for each party
+        for party in parties:
+            party_total_seats[party['name']] = party_total_seats.get(party['name'], 0) + party['seats']
+
+    # Prepare data for template
+    webster_data = {}
+    for party in party_total_seats:
+        webster_data[party] = {
+            'votes': party_votes[party],
+            'seats': party_total_seats[party],
+            'percentage_seats': f"{(party_total_seats[party] / sum(party_total_seats.values())) * 100:.2f}%",
+            'percentage_votes': f"{(party_votes[party] / sum(party_votes.values())) * 100:.2f}%",
+            'difference_in_seats_votes': f"{abs(((party_total_seats[party] / sum(party_total_seats.values())) * 100) - float((party_votes[party] / sum(party_votes.values())) * 100)):.2f}%",
+            'different_from_winner': 0,  # Calculated this later
+        }
+
+    # Calculate 'different_from_winner'
+    for party in webster_data:
+        # Find the party with the most seats
+        winner_party = max(webster_data, key=lambda x: webster_data[x]['seats'])
+        webster_data[party]['different_from_winner'] = 'No' if winner_party == 'Conservative' else 'Yes'
+
+    # Insert data into the table
+    for party in webster_data.keys():
+        # Check if the party exists in the dhont_data dictionary
+        if party in webster_data:
+            system_concat = f"Webster - {level}"
+            cur.execute('''
+                INSERT INTO electionresults VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
+            ''', (
+                system_concat,
+                party,
+                webster_data[party]['votes'],
+                webster_data[party]['seats'],
+                webster_data[party]['percentage_seats'],
+                webster_data[party]['percentage_votes'],
+                webster_data[party]['difference_in_seats_votes'],
+                webster_data[party]['different_from_winner']
+            ))
+
+    electoraldb.commit()
 
 def calculate_ownsystem(level=None):
     pass
@@ -563,11 +681,11 @@ for level in ['County', 'Region', 'Country']:
     calculate_dhondt(level)
     print(f"Finished calculating D'Hondt results for {level}.")
 
-'''
 for level in ['County', 'Region', 'Country']:
     calculate_webster(level)
     print(f"Finished calculating Webster results for {level}.")
 
+'''
 for level in ['County', 'Region', 'Country']:
     calculate_ownsystem(level)
     print(f"Finished calculating Own System results for {level}.")

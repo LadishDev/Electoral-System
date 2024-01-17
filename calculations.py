@@ -51,19 +51,23 @@ def calculate_fptp():
     partiesVotes = {}
     partiesSeats = {}
 
+    # Calculate total constituencies
     for y in data:
         if y[1] not in constituencies:
             totalConstituencies += 1
             constituencies.append(y[1])
 
+    # Calculate total seats
     for x in data:
         if x[0] not in partiesVotes:
             partiesVotes[x[0]] = 0
 
+    # Calculate total votes
     for x in data:
         if x[0] not in partiesSeats:
             partiesSeats[x[0]] = 0
 
+    # Calculate seats for each party and total votes for each party in each constituency
     for x in constituencies:
         constituencyVotes = 0
         winningParty = ""
@@ -78,12 +82,14 @@ def calculate_fptp():
         partiesVotes[winningParty] += winningVotes
         partiesSeats[winningParty] += 1
 
+    # Calculate total votes for each party
     for x in data:
         partiesVotes[x[0]] += x[2]
 
     total_votes = sum(partiesVotes.values())
     most_seats = max(partiesSeats, key=partiesSeats.get)
 
+    # Prepare data for template
     data_unsorted = {
         party: {
             'votes': partiesVotes[party], 
@@ -101,7 +107,7 @@ def calculate_fptp():
         winner_party = max(data_unsorted, key=lambda x: data_unsorted[x]['seats'])
         data_unsorted[party]['different_from_winner'] = 'No' if winner_party == 'Conservative' else 'Yes'
 
-    ## Insert data into the table
+    ## Insert data into the table in the database
     for party in data_unsorted.keys():
         cur.execute('''
             INSERT INTO electionresults VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
@@ -116,12 +122,12 @@ def calculate_fptp():
             data_unsorted[party]['different_from_winner']
         ))
 
-    electoraldb.commit()
+    electoraldb.commit() # commit changes to the database
 
 def calculate_spr(level=None, threshold=None):
     cur = electoraldb.cursor(dictionary=True)
 
-    # Determine the appropriate SQL query based on the specified level
+    # Determine the appropriate SQL query based on the specified level and threshold (if any)
     if level == "All Seats":
         query = '''
             SELECT partyName, SUM(votes) AS total_votes
@@ -167,9 +173,6 @@ def calculate_spr(level=None, threshold=None):
         cur.execute("SELECT COUNT(DISTINCT constituencyName) FROM constituency")
         total_seats_sum = cur.fetchone()['COUNT(DISTINCT constituencyName)']
 
-        # Initialize the proportional_data dictionary
-        proportional_data = {}
-
         # Calculate seats and prepare data for template
         temp_data = {}
         for result in pr_results:
@@ -177,7 +180,7 @@ def calculate_spr(level=None, threshold=None):
             total_votes = int(result['total_votes'])
 
             # Calculate seats for "All Seats" based on the proportional representation formula
-            seats = round(total_votes * total_seats_sum / total_votes_sum)  # Simple proportional representation
+            seats = round(total_votes * total_seats_sum / total_votes_sum)  # Simple proportional representation formula
 
             # If the party is not yet in the aggregate data dictionary, add it
             if party not in temp_data:
@@ -190,7 +193,10 @@ def calculate_spr(level=None, threshold=None):
             temp_data[party]['votes'] += total_votes
             temp_data[party]['seats'] += seats
 
-        # Prepare data for template
+        # Initialize the proportional_data dictionary
+        proportional_data = {}
+
+        # Prepare data for template and calculate the data for percentages and difference_in_seats_votes
         for party in temp_data:
             proportional_data[party] = {
                 'votes': temp_data[party]['votes'],
@@ -202,7 +208,7 @@ def calculate_spr(level=None, threshold=None):
         }
 
     elif level in ["County", "Region", "Country"]:
-        party_seats = {}  # Initialize the dictionary to store total seats for each party
+        party_seats = {}
         # Iterate over the selected level and calculate seats for each party
         for result in pr_results:
             name = result[group_by_column]
@@ -244,7 +250,7 @@ def calculate_spr(level=None, threshold=None):
                     party_seats[party] = 0
                 party_seats[party] += seats
 
-        # itercate over the aggregate data and prepare data for template
+        # Prepare data for template and calculate the data for percentages and difference_in_seats_votes
         proportional_data = {}
         for party in party_aggregate_data:
             proportional_data[party] = {
@@ -256,18 +262,17 @@ def calculate_spr(level=None, threshold=None):
                 'different_from_winner': 0,  # Calculated this later
             }  
 
-    # Calculate 'different_from_winner'
+    # Calculate 'different_from_winner' for each party in the proportional_data dictionary
     for party in proportional_data:
         # Find the party with the most seats
         winner_party = max(proportional_data, key=lambda x: proportional_data[x]['seats'])
         proportional_data[party]['different_from_winner'] = 'No' if winner_party == 'Conservative' else 'Yes'
 
-    # Insert data into the table
+    # Insert data into the table database for each party in the proportional_data dictionary using the appropriate system name
     system_name = "Proportional Representation"
     level_info = f" - {level}" if level != "All Seats" else ""
     threshold_info = f" Threshold" if threshold else ""
     for party in proportional_data.keys():
-        # Check if the party exists in the proportional_data dictionary
         if party in proportional_data:
             system_concat = f"{system_name}{level_info}{threshold_info}"
             cur.execute('''
@@ -283,12 +288,10 @@ def calculate_spr(level=None, threshold=None):
                 proportional_data[party]['different_from_winner']
             ))
     
-    electoraldb.commit()
+    electoraldb.commit() # commit changes to the database
 
 def calculate_lr(level=None):
-    # Get data from the database
     cur = electoraldb.cursor(dictionary=True)
-
     # Determine the column names and join table based on the specified level
     if level == "County":
         column_name = "c.countyName"
@@ -314,7 +317,6 @@ def calculate_lr(level=None):
         JOIN {join_table} ON {join_condition}
         GROUP BY geo_name, party;
     ''')
-    # Fetch the results
     pr_results = cur.fetchall()
 
     # Group the results by geo_name
@@ -327,7 +329,6 @@ def calculate_lr(level=None):
 
     # Initialize the dictionary to store total seats for each party
     party_seats = {}
-
     # Calculate the sum of total votes for the data set
     total_votes_sum = sum(int(result['total_votes']) for result in pr_results)
     # Calculate the sum of total seats for the data set
@@ -372,13 +373,9 @@ def calculate_lr(level=None):
 
     # Distribute the remaining seats to the parties with the largest remainders
     while remaining_seats > 0:
-        # Find the party with the largest remainder
         party_with_largest_remainder = max(party_seats, key=lambda party: party_seats[party]['remainder'])
-        # Allocate one seat to the party with the largest remainder
         party_seats[party_with_largest_remainder]['seats'] += 1
-        # Remove the party from the remainder calculation
         party_seats[party_with_largest_remainder]['remainder'] = 0
-        # Update remaining_seats
         remaining_seats -= 1
 
     # Iterate over the aggregate data and prepare data for template
@@ -393,15 +390,13 @@ def calculate_lr(level=None):
             'different_from_winner': 0,  # Calculated this later
         }
 
-    # Calculate 'different_from_winner'
+    # Calculate 'different_from_winner' for each party in the largest_remainder_data dictionary
     for party in largest_remainder_data:
-        # Find the party with the most seats
         winner_party = max(largest_remainder_data, key=lambda x: largest_remainder_data[x]['seats'])
         largest_remainder_data[party]['different_from_winner'] = 'No' if winner_party == 'Conservative' else 'Yes'
 
-    # Insert data into the table
+    # Insert data into the table in the database
     for party in largest_remainder_data.keys():
-        # Check if the party exists in the largest_remainder_data dictionary
         if party in largest_remainder_data:
             system_concat = f"Largest Remainder - {level}"
             cur.execute('''
@@ -417,21 +412,19 @@ def calculate_lr(level=None):
                 largest_remainder_data[party]['different_from_winner']
             ))
 
-    electoraldb.commit()
+    electoraldb.commit() # commit changes to the database
 
 def calculate_dhondt(level=None):
-    # Get data from the database
     cur = electoraldb.cursor(dictionary=True)
 
-    level_map = {
+    level_map = { # Map the level to the appropriate table and column names
         "County": ("county", "countyName", "countyID"),
         "Region": ("region", "regionName", "regionID"),
         "Country": ("country", "countryName", "countryID")
     }
+    table, column_name, id_column = level_map[level] # Get the table, column name and id column for the specified level
 
-    table, column_name, id_column = level_map[level]
-
-    # SQL query to get all the votes for each party by the specified level
+    # SQL query to get all the votes for each party by the level
     cur.execute(f'''
         SELECT {column_name} AS geo_name, p.partyName AS party, SUM(cd.votes) AS total_votes
         FROM candidate cd
@@ -449,8 +442,8 @@ def calculate_dhondt(level=None):
     party_total_seats = {}
     party_votes = {}
 
+    # Get the unique parties in the current level
     for level_name in unique_levels:
-        # Get the total seats for the current level
         query = (f"""
             SELECT
                 {table}.{column_name},
@@ -476,21 +469,18 @@ def calculate_dhondt(level=None):
         # Initialize a list to store the votes and seats for each party
         parties = []
 
+        # Calculate the total votes for each party
         for party_name in parties_in_level:
-            # Calculate the total votes for the current party
             total_votes = sum(row['total_votes'] for row in results if row['party'] == party_name and row['geo_name'] == level_name)
-
-            # Add the party to the list
             parties.append({'name': party_name, 'votes': total_votes, 'seats': 0})
-
-            # Save the votes for the current party
             party_votes[party_name] = party_votes.get(party_name, 0) + total_votes
 
         # Distribute the seats to the parties based on their votes
         while sum(party['seats'] for party in parties) < total_seats['total seats']:
             for party in parties:
-                party['quotient'] = party['votes'] / (party['seats'] + 1)
+                party['quotient'] = party['votes'] / (party['seats'] + 1) # D'Hondt formula
 
+            # Find the party with the largest quotient and add a seat to it
             max_quotient = max(parties, key=lambda party: party['quotient'])
             max_quotient['seats'] += 1
 
@@ -514,13 +504,12 @@ def calculate_dhondt(level=None):
             'different_from_winner': 0,  # Calculated this later
         }
 
-    # Calculate 'different_from_winner'
+    # Calculate 'different_from_winner' for each party in the dhont_data dictionary
     for party in dhont_data:
-        # Find the party with the most seats
         winner_party = max(dhont_data, key=lambda x: dhont_data[x]['seats'])
         dhont_data[party]['different_from_winner'] = 'No' if winner_party == 'Conservative' else 'Yes'
 
-    # Insert data into the table
+    # Insert data into the table in database
     for party in dhont_data.keys():
         # Check if the party exists in the dhont_data dictionary
         if party in dhont_data:
@@ -538,18 +527,16 @@ def calculate_dhondt(level=None):
                 dhont_data[party]['different_from_winner']
             ))
 
-    electoraldb.commit()
+    electoraldb.commit() # commit changes to the database
 
 def calculate_webster(level=None):
-        # Get data from the database
     cur = electoraldb.cursor(dictionary=True)
 
-    level_map = {
+    level_map = { # Map the level to the appropriate table and column names
         "County": ("county", "countyName", "countyID"),
         "Region": ("region", "regionName", "regionID"),
         "Country": ("country", "countryName", "countryID")
     }
-
     table, column_name, id_column = level_map[level]
 
     # SQL query to get all the votes for each party by the specified level
@@ -570,8 +557,8 @@ def calculate_webster(level=None):
     party_total_seats = {}
     party_votes = {}
 
+    # Get the unique parties in the current level
     for level_name in unique_levels:
-        # Get the total seats for the current level
         query = (f"""
             SELECT
                 {table}.{column_name},
@@ -597,21 +584,18 @@ def calculate_webster(level=None):
         # Initialize a list to store the votes and seats for each party
         parties = []
 
+        # Calculate the total votes for each party
         for party_name in parties_in_level:
-            # Calculate the total votes for the current party
             total_votes = sum(row['total_votes'] for row in results if row['party'] == party_name and row['geo_name'] == level_name)
-
-            # Add the party to the list
             parties.append({'name': party_name, 'votes': total_votes, 'seats': 0})
-
-            # Save the votes for the current party
             party_votes[party_name] = party_votes.get(party_name, 0) + total_votes
 
         # Distribute the seats to the parties based on their votes
         while sum(party['seats'] for party in parties) < total_seats['total seats']:
             for party in parties:
-                party['quotient'] = party['votes'] / (2 * party['seats'] + 1)
+                party['quotient'] = party['votes'] / (2 * party['seats'] + 1) # Webster formula (same as D'Hondt but with 2 * party['seats'] + 1)
 
+            # Find the party with the largest quotient and add a seat to it
             max_quotient = max(parties, key=lambda party: party['quotient'])
             max_quotient['seats'] += 1
 
@@ -635,13 +619,12 @@ def calculate_webster(level=None):
             'different_from_winner': 0,  # Calculated this later
         }
 
-    # Calculate 'different_from_winner'
+    # Calculate 'different_from_winner' for each party in the webster_data dictionary
     for party in webster_data:
-        # Find the party with the most seats
         winner_party = max(webster_data, key=lambda x: webster_data[x]['seats'])
         webster_data[party]['different_from_winner'] = 'No' if winner_party == 'Conservative' else 'Yes'
 
-    # Insert data into the table
+    # Insert data into the table in database
     for party in webster_data.keys():
         # Check if the party exists in the dhont_data dictionary
         if party in webster_data:
@@ -659,37 +642,47 @@ def calculate_webster(level=None):
                 webster_data[party]['different_from_winner']
             ))
 
-    electoraldb.commit()
+    electoraldb.commit() # commit changes to the database
 
 def calculate_ownsystem(level=None):
     pass
 
-## CALL FUNCTIONS TO CALCULATE RESULTS FOR EACH SYSTEM AND STORE THEM IN THE DATABASE
+##              CALL FUNCTIONS TO CALCULATE RESULTS     ##
+##             ALSO PROVIDES A PROGRESS INDICATOR       ##
 
-calculate_fptp()
-print("Finished calculating FPTP results.")
+try:
+    calculate_fptp()
+    print("Finished calculating FPTP results.")
 
-for level in [['All Seats', None], ['All Seats', 5], ['County', None], ['Region', None], ['Country', None]]:
-    calculate_spr(level[0], level[1])
-    print(f"Finished calculating SPR results for {level[0]}{' with ' + str(level[1]) + '% threshold' if level[1] else ''}.")
+    for level in [['All Seats', None], ['All Seats', 5], ['County', None], ['Region', None], ['Country', None]]:
+        calculate_spr(level[0], level[1])
+        print(f"Finished calculating SPR results for {level[0]}{' with ' + str(level[1]) + '% threshold' if level[1] else ''}.")
 
-for level in ['County', 'Region', 'Country']:
-    calculate_lr(level)
-    print(f"Finished calculating LR results for {level}.")
+    for level in ['County', 'Region', 'Country']:
+        calculate_lr(level)
+        print(f"Finished calculating LR results for {level}.")
 
-for level in ['County', 'Region', 'Country']:
-    calculate_dhondt(level)
-    print(f"Finished calculating D'Hondt results for {level}.")
+    for level in ['County', 'Region', 'Country']:
+        calculate_dhondt(level)
+        print(f"Finished calculating D'Hondt results for {level}.")
 
-for level in ['County', 'Region', 'Country']:
-    calculate_webster(level)
-    print(f"Finished calculating Webster results for {level}.")
+    for level in ['County', 'Region', 'Country']:
+        calculate_webster(level)
+        print(f"Finished calculating Webster results for {level}.")
 
-'''
-for level in ['County', 'Region', 'Country']:
-    calculate_ownsystem(level)
-    print(f"Finished calculating Own System results for {level}.")
-'''
+    '''
+    for level in ['County', 'Region', 'Country']:
+        calculate_ownsystem(level)
+        print(f"Finished calculating Own System results for {level}.")
+    '''
+except Exception as e:
+    print("Error: " + str(e))
+    cur = electoraldb.cursor()
+    cur.execute("DROP TABLE IF EXISTS electionresults;")
+    electoraldb.commit()
+    cur.close()
+    print("Please try again. If the error persists, please contact the developer.")
+    exit(1) # Exit with error code 1 (error)
     
 cur.close()
 electoraldb.close()

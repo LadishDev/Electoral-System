@@ -27,8 +27,13 @@ try:
         print("electionresults table exists")
     else:
         print("electionresults table does not exist")
-        subprocess.call(["python", "calculations.py"])
-        print("electionresults table created")
+        result = subprocess.run(['python', 'calculations.py'], text=True)
+        if result.returncode != 0:
+            print(f"Subprocess ended with error code {result.returncode}")
+            print("Exiting the system due to error.")
+            exit(1)
+        else:
+            print("electionresults table created")
 
 except mysql.connector.Error as err:
     print(f"Error: {err}")

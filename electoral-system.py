@@ -18,7 +18,7 @@ try:
         auth_plugin='mysql_native_password'
     )
     print("Connected to the database.")
-    # if electionresults in db doesnt exist then run the script to create it
+    # if electionresults in db doesnt exist then run the script to create it and populate it with the calculations
     cur = electoraldb.cursor()
     cur.execute("SHOW TABLES LIKE 'electionresults';")
     result = cur.fetchone()
@@ -32,7 +32,6 @@ try:
 
 except mysql.connector.Error as err:
     print(f"Error: {err}")
-    # Handle the error (you might want to log it or provide a meaningful response to the user)
     print("Exiting the system due to database connection error.")
     exit(1)
 
@@ -47,6 +46,7 @@ def close_db():
 atexit.register(close_db)
 
 
+####                APP ROUTES TO ACCESS DIFFERENT PAGES             ####
 @app.route('/', methods=['GET', 'POST'])
 def index():
     return render_template('index.html')
@@ -155,7 +155,9 @@ def errorpage():
         return render_template('errorpage.html')
 
 
-def view_all_data():
+####                FUNCTIONS TO GET DATA FROM THE DATABASE             ####
+
+def view_all_data(): # function to get all the data from the database and display it all on one page. -- Improvement would be to add javascript to the page to have mutiple pages to display the data
     cur = electoraldb.cursor()
     cur.execute('''
                 SELECT c1.firstname, c1.surname, c1.gender, p1.partyName, co1.constituencyName, co1.constituencyType, co2.countyName, r1.regionName, co3.countryName, co1.sittingmp, c1.votes 
@@ -171,7 +173,7 @@ def view_all_data():
     return data
 
 def fptp_seats():
-    # dictionary to store the data
+    # dictionary to store the data for the page title
     page_info = {}
     page_info['page_title'] = "First Past The Post Data"
     page_info['page_description'] = "First Past The Post"
@@ -211,11 +213,13 @@ def fptp_seats():
 
     return page_info, data_dict
 
+# Election results on a proportional representation system. Level is used to the option such as All Seats or County and so on. Threshold is used to get the option of threshold for the All Seats option only.
 def election_spr(level=None, threshold=None):
     operation_name = f"{level} - Threshold {threshold}%" if threshold else level
     page_info = {'page_title': "Proportional Representation Data", 'page_description': operation_name}
     cur = electoraldb.cursor()
 
+    # Calculate the system name based on the level and threshold for what data to get from the database and display
     system_name = "Proportional Representation"
     if level != "All Seats":
         system_name += f" - {level}"
@@ -239,7 +243,7 @@ def election_spr(level=None, threshold=None):
                 WHERE 
                     systemName = '{system_name}'
                 ''')
-    data = cur.fetchall()
+    data = cur.fetchall() # Grabs the data and then stick it into a dictionary to be used in the html file
     cur.close()
     data_dict = {row[0]: {'votes': row[1], 'seats': row[2], 'percentage_seats': row[3], 'percentage_votes': row[4], 'difference_in_seats_votes': row[5], 'difference_from_winner': row[6]} for row in data}
     data_dict = dict(sorted(data_dict.items(), key=lambda item: item[1]['seats'], reverse=True))
@@ -252,10 +256,10 @@ def election_spr(level=None, threshold=None):
 
     return page_info, data_dict
 
-# General Election seats allocations based on Largest Remainder ( County, Region, Country )
+
 def election_lr(level=None):
     operation_name = f"{level}" if level is not None else level
-    # dictionary to store the data
+    # dictionary to store the page info for the page title
     page_info = {}
     page_info['page_title'] = "Largest Remainder Data"
     page_info['page_description'] = operation_name
@@ -281,9 +285,8 @@ def election_lr(level=None):
     # Fetch the results
     data = cur.fetchall()
     cur.close()
-    # Convert the data to a dictionary
+    # Convert the data to a dictionary and order it by the number of seats won
     data_dict = {row[1]: {'votes': row[2], 'seats': row[3], 'percentage_seats': row[4], 'percentage_votes': row[5], 'difference_in_seats_votes': row[6], 'difference_from_winner': row[7]} for row in data}
-    #Order the dictionary by the number of seats won
     data_dict = dict(sorted(data_dict.items(), key=lambda item: item[1]['seats'], reverse=True))
     
     # Get the winning party and the difference in seats from the winner for the page info summary
@@ -294,10 +297,10 @@ def election_lr(level=None):
     
     return page_info, data_dict
 
-# General Election seats allocations based on D'Hondt method ( County, Region, Country )
+
 def election_dhondt(level=None):
     operation_name = f"{level}" if level is not None else level
-    # dictionary to store the data
+    # dictionary to store the data for the page title
     page_info = {}
     page_info['page_title'] = "D'Hondt Data"
     page_info['page_description'] = operation_name
@@ -321,9 +324,8 @@ def election_dhondt(level=None):
             ''')
     data = cur.fetchall()
     cur.close()
-    # Convert the data to a dictionary
+    # Convert the data to a dictionary and order it by the number of seats won
     data_dict = {row[1]: {'votes': row[2], 'seats': row[3], 'percentage_seats': row[4], 'percentage_votes': row[5], 'difference_in_seats_votes': row[6], 'difference_from_winner': row[7]} for row in data}
-    #Order the dictionary by the number of seats won
     data_dict = dict(sorted(data_dict.items(), key=lambda item: item[1]['seats'], reverse=True))
 
     # Get the winning party and the difference in seats from the winner for the page info summary
@@ -334,9 +336,10 @@ def election_dhondt(level=None):
 
     return page_info, data_dict
 
+
 def election_webster(level=None):
     operation_name = f"{level}" if level is not None else level
-    # dictionary to store the data
+    # dictionary to store the data for the page title
     page_info = {}
     page_info['page_title'] = "Webster Data"
     page_info['page_description'] = operation_name

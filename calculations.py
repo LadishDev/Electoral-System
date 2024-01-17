@@ -15,13 +15,13 @@ print("Connected to the database.")
 cur = electoraldb.cursor()
 cur.execute('''
     CREATE TABLE IF NOT EXISTS electionresults (
-        systemName VARCHAR(255) NOT NULL,
-        partyName VARCHAR(255) NOT NULL,
+        systemName VARCHAR(37) NOT NULL,
+        partyName VARCHAR(51) NOT NULL,
         votes INT NOT NULL,
         seats INT NOT NULL,
-        percentage_seats VARCHAR(255) NOT NULL,
-        percentage_votes VARCHAR(255) NOT NULL,
-        difference_in_seats_votes VARCHAR(255) NOT NULL,
+        percentage_seats VARCHAR(6) NOT NULL,
+        percentage_votes VARCHAR(6) NOT NULL,
+        difference_in_seats_votes VARCHAR(6) NOT NULL,
         different_from_winner VARCHAR(3) NOT NULL
     );
 ''')

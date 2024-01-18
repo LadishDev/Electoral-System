@@ -644,8 +644,6 @@ def calculate_webster(level=None):
 
     electoraldb.commit() # commit changes to the database
 
-def calculate_ownsystem(level=None):
-    pass
 
 ##              CALL FUNCTIONS TO CALCULATE RESULTS     ##
 ##             ALSO PROVIDES A PROGRESS INDICATOR       ##
@@ -670,11 +668,6 @@ try:
         calculate_webster(level)
         print(f"Finished calculating Webster results for {level}.")
 
-    '''
-    for level in ['County', 'Region', 'Country']:
-        calculate_ownsystem(level)
-        print(f"Finished calculating Own System results for {level}.")
-    '''
 except Exception as e:
     print("Error: " + str(e))
     cur = electoraldb.cursor()

@@ -379,10 +379,6 @@ def election_webster(level=None):
 
     return page_info, data_dict
 
-#  A system of your own
-def election_own():
-    pass  # TODO
-
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0')
